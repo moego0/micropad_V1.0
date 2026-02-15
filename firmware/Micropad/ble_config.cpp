@@ -27,9 +27,7 @@ void BLEConfigService::begin(ProtocolHandler* handler) {
         DEBUG_PRINTLN("ERROR: BLE Server not initialized!");
         return;
     }
-    
-    // Set server callbacks
-    _server->setCallbacks(new ConfigServerCallbacks());
+    // Server callbacks (connect/disconnect, restart advertising) are set in ble_hid; do not overwrite here.
     
     // Create config service
     _configService = _server->createService(CONFIG_SERVICE_UUID);
@@ -57,11 +55,8 @@ void BLEConfigService::begin(ProtocolHandler* handler) {
     // Start the service (config is on same server; clients see it after connecting)
     _configService->start();
     
-    // Do NOT add config service UUID to advertising or call start() again.
-    // The 31-byte BLE ad limit gets exceeded (HID + Device Info + Battery + 128-bit config UUID),
-    // which can drop the device name or discoverable flag so the device doesn't appear in scan.
-    // Advertising was already started in ble_hid with name + discoverable; leave it as-is.
-    
+    // Advertising is started in main (bleKeyboard.startAdvertising()) after this returns.
+    Serial.println("[BLE] Config service 4fafc201-... started (CMD, EVT, BULK chars)");
     DEBUG_PRINTLN("BLE Config Service started");
 }
 
@@ -191,7 +186,7 @@ void ConfigCharCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEC
     }
 }
 
-// Server callbacks: accept connection, restart ad when disconnected (no param update - Windows drops otherwise)
+// Server callbacks are set in ble_hid (HidServerCallbacks) so connect/disconnect and restart advertising are handled there.
 void ConfigServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
     (void)pServer;
     (void)connInfo;
@@ -201,5 +196,5 @@ void ConfigServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& 
     (void)pServer;
     (void)connInfo;
     (void)reason;
-    NimBLEDevice::startAdvertising();
+    // Advertising restart is done in ble_hid HidServerCallbacks::onDisconnect
 }

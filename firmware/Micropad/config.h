@@ -57,6 +57,8 @@ const uint8_t COL_PINS[MATRIX_COLS] = {21, 22, 23, 19};
 // ============================================
 // Communication Configuration
 // ============================================
+// BLE-only build: do NOT use BluetoothSerial.h / SerialBT / SPP (UUID 0x1101).
+// Using only NimBLE avoids Windows creating "Standard Serial over Bluetooth link (COMx)" ports.
 
 // BLE
 #define BLE_DEVICE_NAME DEVICE_NAME

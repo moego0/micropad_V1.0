@@ -78,6 +78,9 @@ void setup() {
     bleConfig.begin(&protocolHandler);
     protocolHandler.setBLEService(&bleConfig);
 
+    // Order required: HID + Config must be registered before advertising (so GATT has config service 4fafc201-...)
+    bleKeyboard.startAdvertising();
+
     preferences.begin(PREFS_NAMESPACE, true);
     bool wifiEnabled = preferences.getBool("wifiEnabled", false);
     if (wifiEnabled) {

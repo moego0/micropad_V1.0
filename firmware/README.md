@@ -79,6 +79,10 @@ pio device monitor -b 115200
 
 ---
 
+## BLE only (no Classic SPP)
+
+This firmware uses **NimBLE only**. It does **not** use Bluetooth Classic or SPP (Serial Port Profile). That avoids Windows creating "Standard Serial over Bluetooth link (COMx)" ports; the Windows app connects via BLE GATT only.
+
 ## GATT (for Windows app)
 
 - Service: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`  

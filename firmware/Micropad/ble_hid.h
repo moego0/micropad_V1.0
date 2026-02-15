@@ -102,6 +102,9 @@ public:
     void begin(const char* deviceName, const char* manufacturer = "Custom");
     void end();
     
+    // Start BLE advertising (call after all GATT services are registered, e.g. config service)
+    void startAdvertising();
+    
     // Connection status
     bool isConnected();
     
@@ -125,16 +128,23 @@ public:
     // Restart advertising if not connected (so Windows can connect again after a failed attempt)
     void restartAdvertisingIfNeeded();
     
+    // Called from server callbacks (do not send HID reports until HID is ready)
+    void onConnect();
+    void onDisconnect(int reason);
+    
 private:
     NimBLEHIDDevice* _hid;
     NimBLECharacteristic* _inputKeyboard;
     NimBLECharacteristic* _inputMediaKeys;
     NimBLECharacteristic* _inputMouse;
     bool _connected;
+    unsigned long _readyAtMs;   // HID reports allowed only when millis() >= _readyAtMs (avoids Event 411)
+    bool _loggedHidReady;      // Log "[BLE] HID ready" once when becoming ready
     
     uint8_t _keyReport[8];
     uint8_t _mouseReport[4];
     
+    bool isHidReady() const;   // _connected && millis() >= _readyAtMs
     void _sendKeyboardReport();
     void _clearKeyboardReport();
 };

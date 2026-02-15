@@ -5,6 +5,27 @@
 #include <NimBLE2904.h>
 #endif
 
+// Server callbacks: set connection state and HID-ready delay; restart advertising on disconnect (BLE only, no SPP)
+static BLEKeyboard* g_pKeyboard = nullptr;
+static unsigned long s_lastBlockedLogMs = 0;
+const unsigned long HID_READY_DELAY_MS = 1500;
+
+class HidServerCallbacks : public NimBLEServerCallbacks {
+public:
+    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
+        (void)pServer;
+        Serial.printf("[BLE] Client connected, conn_id=%d\n", connInfo.getConnHandle());
+        if (g_pKeyboard) g_pKeyboard->onConnect();
+    }
+    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
+        (void)connInfo;
+        Serial.printf("[BLE] Client disconnected, reason=%d (0x%02x)\n", reason, (unsigned)reason);
+        if (g_pKeyboard) g_pKeyboard->onDisconnect(reason);
+        NimBLEDevice::startAdvertising();
+        Serial.println("[BLE] Advertising restarted");
+    }
+};
+
 // Combined HID Report Descriptor (keyboard + LED, consumer 16-bit, mouse) - improves Windows driver compatibility
 static const uint8_t _hidReportDescriptor[] = {
     // Keyboard Report (8 bytes) with LED output
@@ -93,83 +114,109 @@ BLEKeyboard::BLEKeyboard() {
     _inputMediaKeys = nullptr;
     _inputMouse = nullptr;
     _connected = false;
+    _readyAtMs = 0;
+    _loggedHidReady = false;
     _clearKeyboardReport();
     memset(_mouseReport, 0, sizeof(_mouseReport));
 }
 
 void BLEKeyboard::begin(const char* deviceName, const char* manufacturer) {
+    g_pKeyboard = this;
+    Serial.println("[BLE] Initializing NimBLE (BLE only, no Classic SPP)...");
     NimBLEDevice::init(deviceName);
     NimBLEServer* pServer = NimBLEDevice::createServer();
-    if (!pServer) return;
-
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-    NimBLEDevice::setSecurityAuth(false, false, false);
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
-
-    // Device Info (Windows needs this)
-    NimBLEService* pDeviceInfo = pServer->createService(NimBLEUUID((uint16_t)0x180A));
-    NimBLECharacteristic* pChar;
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A29), NIMBLE_PROPERTY::READ);
-    pChar->setValue(manufacturer);
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A24), NIMBLE_PROPERTY::READ);
-    pChar->setValue("Micropad-v1.0");
-    char serial[32];
-    uint64_t chipid = ESP.getEfuseMac();
-    snprintf(serial, sizeof(serial), "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A25), NIMBLE_PROPERTY::READ);
-    pChar->setValue(serial);
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A26), NIMBLE_PROPERTY::READ);
-    pChar->setValue(FIRMWARE_VERSION);
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A27), NIMBLE_PROPERTY::READ);
-    pChar->setValue(HARDWARE_VERSION);
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A28), NIMBLE_PROPERTY::READ);
-    pChar->setValue(FIRMWARE_VERSION);
-    uint8_t pnp[] = { 0x02, 0x5E, 0x04, 0x01, 0x00, 0x00, 0x01 };
-    pChar = pDeviceInfo->createCharacteristic(NimBLEUUID((uint16_t)0x2A50), NIMBLE_PROPERTY::READ);
-    pChar->setValue(pnp, sizeof(pnp));
-    pDeviceInfo->start();
-
-    // Battery (Windows pairing)
-    NimBLEService* pBattery = pServer->createService(NimBLEUUID((uint16_t)0x180F));
-    NimBLECharacteristic* pBatteryLevel = pBattery->createCharacteristic(
-        NimBLEUUID((uint16_t)0x2A19), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-#if __has_include(<NimBLE2904.h>)
-    NimBLE2904* pDesc = (NimBLE2904*)pBatteryLevel->createDescriptor(NimBLEUUID((uint16_t)0x2904));
-    if (pDesc) {
-        pDesc->setFormat(NimBLE2904::FORMAT_UINT8);
-        pDesc->setNamespace(1);
-        pDesc->setUnit(0x27AD);
+    if (!pServer) {
+        Serial.println("[BLE] ERROR: createServer failed");
+        g_pKeyboard = nullptr;
+        return;
     }
-#endif
-    uint8_t batteryLevel = 100;
-    pBatteryLevel->setValue(&batteryLevel, 1);
-    pBattery->start();
+    pServer->setCallbacks(new HidServerCallbacks());
 
-    // HID (keyboard + media + mouse)
+    // Windows-friendly security: bonding + encryption (required for HID), no passkey UI
+    NimBLEDevice::setSecurityAuth(true, false, true);   // bonding ON, MITM OFF, secure connections ON
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    Serial.println("[BLE] Security: bonding=ON, IOCap=NO_INPUT_OUTPUT, secure_conn=ON");
+
+    // Use NimBLEHIDDevice only (no duplicate Device Info/Battery). It creates 0x180A, 0x1812, 0x180F
+    // with required HID chars: 2A4A (HID Info), 2A4B (Report Map), 2A4C (Control), 2A4E (Protocol Mode),
+    // 2A4D (Reports) with Report Reference 0x2908 and READ_ENC — required for Windows (avoids Event 411).
     _hid = new NimBLEHIDDevice(pServer);
-    if (!_hid) return;
+    if (!_hid) {
+        Serial.println("[BLE] ERROR: NimBLEHIDDevice failed");
+        g_pKeyboard = nullptr;
+        return;
+    }
     _hid->setManufacturer(manufacturer);
     _hid->setPnp(0x02, 0x045E, 0x0001, 0x0100);
-    _hid->setHidInfo(0x11, 0x01);
+    _hid->setHidInfo(0x00, 0x01);   // country 0, flags RemoteWake (Windows expects valid HID info)
     _hid->setReportMap((uint8_t*)_hidReportDescriptor, sizeof(_hidReportDescriptor));
-    _hid->startServices();
+    // Create input report characteristics (adds 2A4D + 0x2908 + READ_ENC) before starting services
     _inputKeyboard = _hid->getInputReport(1);
     _inputMediaKeys = _hid->getInputReport(2);
     _inputMouse = _hid->getInputReport(3);
-    if (!_inputKeyboard || !_inputMediaKeys || !_inputMouse) return;
+    if (!_inputKeyboard || !_inputMediaKeys || !_inputMouse) {
+        Serial.println("[BLE] ERROR: HID input reports missing");
+        g_pKeyboard = nullptr;
+        return;
+    }
+    _hid->setBatteryLevel(100);
+    // Optional: add model/serial/fw to library's Device Info before start (must be before startServices)
+    NimBLEService* pDi = _hid->getDeviceInfoService();
+    if (pDi) {
+        NimBLECharacteristic* c = pDi->createCharacteristic(NimBLEUUID((uint16_t)0x2A24), NIMBLE_PROPERTY::READ);
+        if (c) c->setValue("Micropad-v1.0");
+        char serial[32];
+        uint64_t chipid = ESP.getEfuseMac();
+        snprintf(serial, sizeof(serial), "%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
+        c = pDi->createCharacteristic(NimBLEUUID((uint16_t)0x2A25), NIMBLE_PROPERTY::READ);
+        if (c) c->setValue(serial);
+        c = pDi->createCharacteristic(NimBLEUUID((uint16_t)0x2A26), NIMBLE_PROPERTY::READ);
+        if (c) c->setValue(FIRMWARE_VERSION);
+    }
+    _hid->startServices();   // starts Device Info, HID, Battery (single set — no duplicates)
+    Serial.println("[BLE] HID service 0x1812: 2A4A,2A4B,2A4C,2A4E,2A4D+2908 READ_ENC; DeviceInfo 0x180A; Battery 0x180F");
 
-    // Advertise and start
+    // Advertising: HID first, appearance keyboard (Windows expects for hidbthle)
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->setName(std::string(deviceName));
+    pAdvertising->setAppearance(0x03C1);   // HID Keyboard (Windows HID-over-GATT)
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x1812));
+    pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180A));
+    pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180F));
+    pAdvertising->addServiceUUID(NimBLEUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b"));
     pAdvertising->enableScanResponse(true);
+}
+
+void BLEKeyboard::startAdvertising() {
+    Serial.println("[BLE] Advertising started (name + 0x1812, 0x180A, 0x180F, config UUID)");
     NimBLEDevice::startAdvertising();
-    delay(100);
 }
 
 void BLEKeyboard::end() {
+    g_pKeyboard = nullptr;
     NimBLEDevice::deinit(true);
     _connected = false;
+    _readyAtMs = 0;
+    _loggedHidReady = false;
+}
+
+void BLEKeyboard::onConnect() {
+    _connected = true;
+    _readyAtMs = millis() + HID_READY_DELAY_MS;
+    _loggedHidReady = false;
+    Serial.printf("[BLE] HID ready in %lu ms (no reports until then)\n", (unsigned long)HID_READY_DELAY_MS);
+}
+
+void BLEKeyboard::onDisconnect(int reason) {
+    (void)reason;
+    _connected = false;
+    _readyAtMs = 0;
+    _loggedHidReady = false;
+}
+
+bool BLEKeyboard::isHidReady() const {
+    return _connected && (_readyAtMs != 0) && (millis() >= _readyAtMs);
 }
 
 void BLEKeyboard::restartAdvertisingIfNeeded() {
@@ -190,37 +237,46 @@ bool BLEKeyboard::isConnected() {
 
 void BLEKeyboard::update() {
     NimBLEServer* pServer = NimBLEDevice::getServer();
-    _connected = (pServer && pServer->getConnectedCount() > 0);
+    if (!pServer || pServer->getConnectedCount() == 0) {
+        if (_connected) {
+            _connected = false;
+            _readyAtMs = 0;
+            _loggedHidReady = false;
+        }
+        return;
+    }
+    // When HID becomes ready, log once
+    if (_connected && _readyAtMs != 0 && millis() >= _readyAtMs && !_loggedHidReady) {
+        _loggedHidReady = true;
+        Serial.println("[BLE] HID ready, reports enabled");
+    }
 }
 
 void BLEKeyboard::sendKeyPress(uint8_t key, uint8_t modifiers) {
-    if (!_connected) return;
-    
-    // Press
+    if (!isHidReady()) {
+        if (millis() - s_lastBlockedLogMs >= 2000) { s_lastBlockedLogMs = millis(); Serial.println("[BLE] report blocked (HID not ready)"); }
+        return;
+    }
     sendKeyDown(key, modifiers);
     delay(10);
-    
-    // Release
     sendKeyUp();
 }
 
 void BLEKeyboard::sendKeyDown(uint8_t key, uint8_t modifiers) {
-    if (!_connected) return;
-    
+    if (!isHidReady()) return;
     _keyReport[0] = modifiers;
     _keyReport[2] = key;
     _sendKeyboardReport();
 }
 
 void BLEKeyboard::sendKeyUp() {
-    if (!_connected) return;
-    
+    if (!isHidReady()) return;
     _clearKeyboardReport();
     _sendKeyboardReport();
 }
 
 void BLEKeyboard::sendText(const char* text) {
-    if (!_connected) return;
+    if (!isHidReady()) return;
     
     while (*text) {
         uint8_t key = 0;
@@ -263,7 +319,7 @@ void BLEKeyboard::sendText(const char* text) {
 }
 
 void BLEKeyboard::sendMediaKey(uint16_t key) {
-    if (!_connected || !_inputMediaKeys) return;
+    if (!isHidReady() || !_inputMediaKeys) return;
 
     // Consumer control: 16-bit usage (low byte, high byte)
     uint8_t report[2] = { (uint8_t)(key & 0xFF), (uint8_t)((key >> 8) & 0xFF) };
@@ -281,7 +337,7 @@ void BLEKeyboard::sendMediaKey(uint16_t key) {
 }
 
 void BLEKeyboard::sendMouseClick(uint8_t button) {
-    if (!_connected || !_inputMouse) return;
+    if (!isHidReady() || !_inputMouse) return;
 
     // Press
     _mouseReport[0] = button;
@@ -296,7 +352,7 @@ void BLEKeyboard::sendMouseClick(uint8_t button) {
 }
 
 void BLEKeyboard::sendMouseMove(int8_t x, int8_t y) {
-    if (!_connected || !_inputMouse) return;
+    if (!isHidReady() || !_inputMouse) return;
 
     _mouseReport[0] = 0;  // No buttons
     _mouseReport[1] = x;
@@ -308,7 +364,7 @@ void BLEKeyboard::sendMouseMove(int8_t x, int8_t y) {
 }
 
 void BLEKeyboard::sendMouseScroll(int8_t wheel) {
-    if (!_connected || !_inputMouse) return;
+    if (!isHidReady() || !_inputMouse) return;
 
     _mouseReport[0] = 0;  // No buttons
     _mouseReport[1] = 0;  // No X
@@ -320,7 +376,7 @@ void BLEKeyboard::sendMouseScroll(int8_t wheel) {
 }
 
 void BLEKeyboard::_sendKeyboardReport() {
-    if (!_inputKeyboard) return;
+    if (!isHidReady() || !_inputKeyboard) return;
     _inputKeyboard->setValue(_keyReport, 8);
     _inputKeyboard->notify();
 }

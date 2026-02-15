@@ -43,6 +43,10 @@ public partial class DevicesViewModel : ObservableObject
         _connection = connection;
         _protocol = protocol;
         _mainViewModel = mainViewModel;
+        _connection.Disconnected += (_, _) =>
+        {
+            App.Current.Dispatcher.Invoke(() => IsConnected = false);
+        };
     }
 
     [RelayCommand]
@@ -61,9 +65,11 @@ public partial class DevicesViewModel : ObservableObject
 
         _watcherPaired.Added += OnDeviceAdded;
         _watcherPaired.Updated += OnDeviceUpdated;
+        _watcherPaired.Removed += OnDeviceRemoved;
         _watcherPaired.Stopped += OnWatcherStopped;
         _watcherUnpaired.Added += OnDeviceAdded;
         _watcherUnpaired.Updated += OnDeviceUpdated;
+        _watcherUnpaired.Removed += OnDeviceRemoved;
         _watcherUnpaired.Stopped += OnWatcherStopped;
 
         _watcherPaired.Start();
@@ -90,26 +96,38 @@ public partial class DevicesViewModel : ObservableObject
     {
         if (SelectedDevice == null) return;
 
-        try
-        {
-            StatusText = "Connecting...";
-            await _connection.ConnectAsync(SelectedDevice.Id);
+        const int maxRetries = 3;
+        int[] backoffMs = { 0, 1000, 2000 };
 
-            // Get device info
-            var deviceInfo = await _protocol.GetDeviceInfoAsync();
-            if (deviceInfo != null)
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
             {
-                DeviceInfo = $"ID: {deviceInfo.DeviceId}\nFW: {deviceInfo.FirmwareVersion}\nHW: {deviceInfo.HardwareVersion}\nBattery: {deviceInfo.BatteryLevel}%";
-                _mainViewModel.SetBatteryLevel(deviceInfo.BatteryLevel);
-            }
+                if (attempt > 0)
+                    StatusText = $"Retrying in {(backoffMs[attempt] / 1000)}s... (attempt {attempt + 1}/{maxRetries})";
+                else
+                    StatusText = "Connecting...";
+                if (backoffMs[attempt] > 0)
+                    await Task.Delay(backoffMs[attempt]);
 
-            IsConnected = true;
-            StatusText = "Connected";
-        }
-        catch (Exception ex)
-        {
-            var msg = ex.InnerException != null ? $"{ex.Message} ({ex.InnerException.Message})" : ex.Message;
-            StatusText = $"Connection failed: {msg}";
+                await _connection.ConnectAsync(SelectedDevice.Id);
+
+                var deviceInfo = await _protocol.GetDeviceInfoAsync();
+                if (deviceInfo != null)
+                {
+                    DeviceInfo = $"ID: {deviceInfo.DeviceId}\nFW: {deviceInfo.FirmwareVersion}\nHW: {deviceInfo.HardwareVersion}\nBattery: {deviceInfo.BatteryLevel}%";
+                    _mainViewModel.SetBatteryLevel(deviceInfo.BatteryLevel);
+                }
+
+                IsConnected = true;
+                StatusText = "Connected";
+                return;
+            }
+            catch (Exception ex)
+            {
+                var msg = ex.InnerException != null ? $"{ex.Message} ({ex.InnerException.Message})" : ex.Message;
+                StatusText = attempt < maxRetries - 1 ? $"Connection failed: {msg}" : $"Connection failed: {msg}";
+            }
         }
     }
 
@@ -153,8 +171,21 @@ public partial class DevicesViewModel : ObservableObject
         {
             var device = Devices.FirstOrDefault(d => d.Id == deviceUpdate.Id);
             if (device != null)
-            {
                 device.Update(deviceUpdate);
+        });
+    }
+
+    private void OnDeviceRemoved(DeviceWatcher sender, DeviceInformationUpdate deviceUpdate)
+    {
+        App.Current.Dispatcher.Invoke(() =>
+        {
+            var device = Devices.FirstOrDefault(d => d.Id == deviceUpdate.Id);
+            if (device != null)
+            {
+                Devices.Remove(device);
+                if (SelectedDevice?.Id == deviceUpdate.Id)
+                    SelectedDevice = null;
+                // Connection drop is handled by _connection.Disconnected
             }
         });
     }
