@@ -1,7 +1,33 @@
 #include "ble_config.h"
 #include "protocol_handler.h"
 
+#if defined(ESP32)
+#include "mbedtls/base64.h"
+#endif
+
 BLEConfigService* BLEConfigService::_instance = nullptr;
+
+// Decode Base64 to String (UTF-8). Used for dataB64 chunk payload from Windows app.
+static String base64Decode(const String& in) {
+#if defined(ESP32)
+    size_t outLen;
+    size_t inLen = in.length();
+    if (inLen == 0) return String();
+    // Decoded size is at most 3/4 of input
+    unsigned char* buf = (unsigned char*)malloc((inLen / 4 + 1) * 3);
+    if (!buf) return String();
+    int ret = mbedtls_base64_decode(buf, (inLen / 4 + 1) * 3, &outLen, (const unsigned char*)in.c_str(), inLen);
+    String out;
+    if (ret == 0 && outLen > 0) {
+        out = String((char*)buf, outLen);
+    }
+    free(buf);
+    return out;
+#else
+    (void)in;
+    return String();
+#endif
+}
 
 BLEConfigService::BLEConfigService() {
     _server = nullptr;
@@ -108,31 +134,41 @@ void BLEConfigService::handleWrite(NimBLECharacteristic* pChar) {
     }
 }
 
+// Chunk format from Windows app: {"chunk":0,"total":N,"dataB64":"base64..."} (preferred)
+// Legacy: {"chunk":0,"total":N,"data":"..."}
 void BLEConfigService::handleChunkedMessage(const String& chunk) {
-    // Parse chunk info
-    // Format: {"chunk":0, "total":3, "data":"..."}
-    
     int chunkStart = chunk.indexOf("\"chunk\":") + 8;
     int chunkEnd = chunk.indexOf(",", chunkStart);
     int chunkNum = chunk.substring(chunkStart, chunkEnd).toInt();
     
     int totalStart = chunk.indexOf("\"total\":") + 8;
     int totalEnd = chunk.indexOf(",", totalStart);
+    if (totalEnd < 0) totalEnd = chunk.indexOf("}", totalStart);
     int totalChunks = chunk.substring(totalStart, totalEnd).toInt();
     
-    int dataStart = chunk.indexOf("\"data\":\"") + 8;
-    int dataEnd = chunk.lastIndexOf("\"");
-    String data = chunk.substring(dataStart, dataEnd);
+    String data;
+    int dataB64Start = chunk.indexOf("\"dataB64\":\"");
+    if (dataB64Start >= 0) {
+        dataB64Start += 11;
+        int dataB64End = chunk.indexOf("\"", dataB64Start);
+        String b64 = chunk.substring(dataB64Start, dataB64End);
+        data = base64Decode(b64);
+    } else {
+        int dataStart = chunk.indexOf("\"data\":\"") + 8;
+        int dataEnd = chunk.lastIndexOf("\"");
+        if (dataEnd > dataStart)
+            data = chunk.substring(dataStart, dataEnd);
+        data.replace("\\\"", "\"");
+        data.replace("\\\\", "\\");
+    }
     
     if (chunkNum == 0) {
-        // First chunk, reset buffer
         _rxBuffer = "";
         _isReceivingChunked = true;
         _chunkIndex = 0;
         _totalChunks = totalChunks;
     }
     
-    // Append data
     _rxBuffer += data;
     _chunkIndex++;
     

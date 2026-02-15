@@ -14,13 +14,25 @@
         <Border Grid.Row="0" Background="{StaticResource BgSecondary}"
                 Padding="24" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
             <Grid>
-                <StackPanel>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0">
                     <TextBlock Text="Macro Editor" FontSize="24" FontWeight="SemiBold"
                               Foreground="{StaticResource TextPrimary}"/>
                     <TextBlock Text="Record or manually create a sequence of actions"
                               FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,6,0,0"/>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
+                    <TextBlock Text="Macro name:" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox Text="{Binding MacroName, UpdateSourceTrigger=PropertyChanged}" Width="180" Height="28"
+                             Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}" Padding="8,4"/>
+                    <Button Content="Save macro" Command="{Binding SaveMacroCommand}"
+                            Background="{StaticResource AccentBlue}" Foreground="White"
+                            Padding="12,6" Margin="12,0,0,0" BorderThickness="0" Cursor="Hand"/>
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Button Content="Start Recording" Command="{Binding StartRecordingCommand}"
                             Background="{StaticResource Error}" Foreground="White"
                             Padding="14,8" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"

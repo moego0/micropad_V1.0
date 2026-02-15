@@ -12,6 +12,7 @@ namespace Micropad.Services.Communication;
 public class BleConnection : IDeviceConnection
 {
     private BluetoothLEDevice? _device;
+    private GattSession? _gattSession;
     private GattDeviceService? _configService;
     private GattCharacteristic? _cmdChar;
     private GattCharacteristic? _evtChar;
@@ -19,6 +20,18 @@ public class BleConnection : IDeviceConnection
     private readonly Guid _configServiceUuid = Guid.Parse("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
     private readonly Guid _cmdCharUuid = Guid.Parse("4fafc201-1fb5-459e-8fcc-c5c9c331914c");
     private readonly Guid _evtCharUuid = Guid.Parse("4fafc201-1fb5-459e-8fcc-c5c9c331914d");
+
+    private string? _lastDeviceId;
+    private bool _autoReconnect;
+    private CancellationTokenSource? _reconnectCts;
+    private readonly object _connectionLock = new();
+
+    /// <summary>When true, attempt to reconnect with exponential backoff after disconnect (e.g. when connection drops).</summary>
+    public bool AutoReconnect
+    {
+        get => _autoReconnect;
+        set => _autoReconnect = value;
+    }
 
     public bool IsConnected => _device != null && _device.ConnectionStatus == BluetoothConnectionStatus.Connected;
     public string DeviceName => _device?.Name ?? string.Empty;
@@ -29,6 +42,13 @@ public class BleConnection : IDeviceConnection
 
     public async Task<bool> ConnectAsync(string deviceId)
     {
+        lock (_connectionLock)
+        {
+            _lastDeviceId = deviceId;
+            _reconnectCts?.Cancel();
+            _reconnectCts = null;
+        }
+
         try
         {
             _device = await BluetoothLEDevice.FromIdAsync(deviceId);
@@ -38,21 +58,36 @@ public class BleConnection : IDeviceConnection
                     "Could not open the device (FromIdAsync returned null). Remove Micropad from Settings → Bluetooth → Remove device, then power-cycle the Micropad and try again.");
             }
 
-            // Pair if not already paired: try Encryption first (Windows-friendly), fallback to None if needed
             if (!_device.DeviceInformation.Pairing.IsPaired)
             {
                 var pairingResult = await PairWithFallbackAsync();
                 if (pairingResult.Status != DevicePairingResultStatus.Paired &&
                     pairingResult.Status != DevicePairingResultStatus.AlreadyPaired)
                 {
+                    DisposeConnectionHandles();
                     throw new InvalidOperationException(
                         $"Pairing failed: {pairingResult.Status}. Remove device from Bluetooth settings, power-cycle Micropad, then try Connect again.");
                 }
                 Trace.WriteLine($"[BLE] Pairing result: {pairingResult.Status}");
             }
 
-            // Give the device a moment after pairing; then request GATT services (triggers BLE GATT connection)
             await Task.Delay(500);
+
+            // Create GattSession and set MaintainConnection = true for stable connection on Windows 11
+            try
+            {
+                _gattSession = await GattSession.FromDeviceIdAsync(_device.BluetoothDeviceId);
+                if (_gattSession != null && _gattSession.CanMaintainConnection)
+                {
+                    _gattSession.MaintainConnection = true;
+                    Trace.WriteLine("[BLE] GattSession created with MaintainConnection = true");
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"[BLE] GattSession creation failed (continuing): {ex.Message}");
+            }
+
             var servicesResult = await _device.GetGattServicesAsync(BluetoothCacheMode.Uncached);
             if (servicesResult.Status != GattCommunicationStatus.Success)
             {
@@ -63,7 +98,6 @@ public class BleConnection : IDeviceConnection
                 throw new InvalidOperationException($"GATT services error: {err}");
             }
 
-            // Log all discovered service UUIDs for diagnostics
             var serviceList = servicesResult.Services.Select(s => s.Uuid.ToString()).ToList();
             Trace.WriteLine($"[BLE] GATT status: {servicesResult.Status}, discovered services ({serviceList.Count}): " +
                 string.Join("; ", serviceList));
@@ -131,15 +165,17 @@ public class BleConnection : IDeviceConnection
     {
         if (_evtChar != null)
         {
-            _evtChar.ValueChanged -= OnValueChanged;
+            try { _evtChar.ValueChanged -= OnValueChanged; } catch { }
             _evtChar = null;
         }
         _cmdChar = null;
         _configService?.Dispose();
         _configService = null;
+        _gattSession?.Dispose();
+        _gattSession = null;
         if (_device != null)
         {
-            _device.ConnectionStatusChanged -= OnConnectionStatusChanged;
+            try { _device.ConnectionStatusChanged -= OnConnectionStatusChanged; } catch { }
             _device.Dispose();
             _device = null;
         }
@@ -147,11 +183,64 @@ public class BleConnection : IDeviceConnection
 
     public async Task DisconnectAsync()
     {
+        lock (_connectionLock)
+        {
+            _reconnectCts?.Cancel();
+            _reconnectCts = null;
+        }
         if (_evtChar != null)
             _evtChar.ValueChanged -= OnValueChanged;
         DisposeConnectionHandles();
         Disconnected?.Invoke(this, EventArgs.Empty);
         await Task.CompletedTask;
+    }
+
+    private void OnConnectionStatusChanged(BluetoothLEDevice sender, object args)
+    {
+        if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
+        {
+            DisposeConnectionHandles();
+            Disconnected?.Invoke(this, EventArgs.Empty);
+
+            if (_autoReconnect && !string.IsNullOrEmpty(_lastDeviceId))
+            {
+                _ = TryAutoReconnectAsync();
+            }
+        }
+    }
+
+    private async Task TryAutoReconnectAsync()
+    {
+        lock (_connectionLock)
+        {
+            _reconnectCts?.Cancel();
+            _reconnectCts = new CancellationTokenSource();
+        }
+        var cts = _reconnectCts!;
+        int delayMs = 1000;
+        const int maxDelayMs = 30000;
+        int attempt = 0;
+
+        while (!cts.Token.IsCancellationRequested)
+        {
+            attempt++;
+            await Task.Delay(delayMs, cts.Token).ConfigureAwait(false);
+            if (cts.Token.IsCancellationRequested) return;
+
+            var deviceId = _lastDeviceId;
+            if (string.IsNullOrEmpty(deviceId)) return;
+
+            try
+            {
+                Trace.WriteLine($"[BLE] Auto-reconnect attempt {attempt}");
+                await ConnectAsync(deviceId).ConfigureAwait(false);
+                return;
+            }
+            catch
+            {
+                delayMs = Math.Min(delayMs * 2, maxDelayMs);
+            }
+        }
     }
 
     public async Task SendMessageAsync(string json)
@@ -163,10 +252,9 @@ public class BleConnection : IDeviceConnection
 
         var bytes = Encoding.UTF8.GetBytes(json);
 
-        // Check if chunking needed
         if (bytes.Length > 512)
         {
-            await SendChunkedAsync(json);
+            await SendChunkedAsync(bytes).ConfigureAwait(false);
         }
         else
         {
@@ -176,22 +264,30 @@ public class BleConnection : IDeviceConnection
         }
     }
 
-    private async Task SendChunkedAsync(string message)
+    /// <summary>
+    /// Chunk format (firmware-compatible): each chunk is a JSON object:
+    /// { "chunk": index, "total": totalChunks, "dataB64": "base64-encoded-utf8-payload" }
+    /// Chunks are split by UTF-8 byte length (not string length). Payload is Base64 to avoid JSON escaping.
+    /// Max single write ~512 bytes; chunk envelope ~80 bytes so payload ~400 bytes per chunk (Base64 adds ~33%).
+    /// </summary>
+    private async Task SendChunkedAsync(byte[] utf8Bytes)
     {
-        const int chunkSize = 480;
-        var totalChunks = (message.Length + chunkSize - 1) / chunkSize;
+        const int maxPayloadBytes = 400;
+        var totalChunks = (utf8Bytes.Length + maxPayloadBytes - 1) / maxPayloadBytes;
 
         for (int i = 0; i < totalChunks; i++)
         {
-            var start = i * chunkSize;
-            var len = Math.Min(chunkSize, message.Length - start);
-            var data = message.Substring(start, len);
+            int start = i * maxPayloadBytes;
+            int len = Math.Min(maxPayloadBytes, utf8Bytes.Length - start);
+            var segment = new byte[len];
+            Array.Copy(utf8Bytes, start, segment, 0, len);
+            var dataB64 = Convert.ToBase64String(segment);
 
-            var chunk = $"{{\"chunk\":{i},\"total\":{totalChunks},\"data\":\"{data}\"}}";
-            var bytes = Encoding.UTF8.GetBytes(chunk);
+            var chunk = $"{{\"chunk\":{i},\"total\":{totalChunks},\"dataB64\":\"{dataB64}\"}}";
+            var chunkBytes = Encoding.UTF8.GetBytes(chunk);
 
             var writer = new DataWriter();
-            writer.WriteBytes(bytes);
+            writer.WriteBytes(chunkBytes);
             await _cmdChar!.WriteValueAsync(writer.DetachBuffer());
 
             await Task.Delay(10);
@@ -206,13 +302,5 @@ public class BleConnection : IDeviceConnection
 
         var json = Encoding.UTF8.GetString(bytes);
         MessageReceived?.Invoke(this, json);
-    }
-
-    private void OnConnectionStatusChanged(BluetoothLEDevice sender, object args)
-    {
-        if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
-        {
-            Disconnected?.Invoke(this, EventArgs.Empty);
-        }
     }
 }

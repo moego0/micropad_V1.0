@@ -4,25 +4,30 @@ using System.Threading.Tasks;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth;
+using Windows.Devices.Bluetooth.Advertisement;
+using Windows.Devices.Enumeration;
 using Micropad.Core.Interfaces;
+using Micropad.Core.Models;
 using Micropad.Services.Communication;
 
 namespace Micropad.App.ViewModels;
 
 public partial class DevicesViewModel : ObservableObject
 {
+    /// <summary>Micropad Config Service UUID - used to filter BLE advertisements so we only discover our device (works even if name is blank or changes).</summary>
+    private static readonly Guid ConfigServiceUuid = Guid.Parse("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+
     private readonly IDeviceConnection _connection;
     private readonly ProtocolHandler _protocol;
-    private DeviceWatcher? _watcherPaired;
-    private DeviceWatcher? _watcherUnpaired;
+    private readonly Micropad.Services.Storage.SettingsStorage _settingsStorage;
+    private BluetoothLEAdvertisementWatcher? _watcher;
 
     [ObservableProperty]
-    private ObservableCollection<DeviceInformation> _devices = new();
+    private ObservableCollection<BleDiscoveredDevice> _devices = new();
 
     [ObservableProperty]
-    private DeviceInformation? _selectedDevice;
+    private BleDiscoveredDevice? _selectedDevice;
 
     [ObservableProperty]
     private bool _isScanning;
@@ -38,11 +43,12 @@ public partial class DevicesViewModel : ObservableObject
 
     private readonly MainViewModel _mainViewModel;
 
-    public DevicesViewModel(IDeviceConnection connection, ProtocolHandler protocol, MainViewModel mainViewModel)
+    public DevicesViewModel(IDeviceConnection connection, ProtocolHandler protocol, MainViewModel mainViewModel, Micropad.Services.Storage.SettingsStorage settingsStorage)
     {
         _connection = connection;
         _protocol = protocol;
         _mainViewModel = mainViewModel;
+        _settingsStorage = settingsStorage;
         _connection.Disconnected += (_, _) =>
         {
             App.Current.Dispatcher.Invoke(() => IsConnected = false);
@@ -54,41 +60,66 @@ public partial class DevicesViewModel : ObservableObject
     {
         Devices.Clear();
         IsScanning = true;
-        StatusText = "Scanning for Micropad (paired and unpaired)...";
+        StatusText = "Scanning for Micropad (devices with Config service)...";
 
-        // Watch BOTH paired and unpaired BLE devices so first-time use works
-        string selectorPaired = BluetoothLEDevice.GetDeviceSelectorFromPairingState(true);
-        string selectorUnpaired = BluetoothLEDevice.GetDeviceSelectorFromPairingState(false);
+        // Filter by Micropad Config Service UUID so we find the device even with blank or changed name
+        var filter = new BluetoothLEAdvertisementFilter();
+        filter.Advertisement.ServiceUuids.Add(ConfigServiceUuid);
+        _watcher = new BluetoothLEAdvertisementWatcher(filter)
+        {
+            ScanningMode = BluetoothLEScanningMode.Active
+        };
 
-        _watcherPaired = DeviceInformation.CreateWatcher(selectorPaired);
-        _watcherUnpaired = DeviceInformation.CreateWatcher(selectorUnpaired);
+        _watcher.Received += OnAdvertisementReceived;
+        _watcher.Stopped += OnWatcherStopped;
+        _watcher.Start();
 
-        _watcherPaired.Added += OnDeviceAdded;
-        _watcherPaired.Updated += OnDeviceUpdated;
-        _watcherPaired.Removed += OnDeviceRemoved;
-        _watcherPaired.Stopped += OnWatcherStopped;
-        _watcherUnpaired.Added += OnDeviceAdded;
-        _watcherUnpaired.Updated += OnDeviceUpdated;
-        _watcherUnpaired.Removed += OnDeviceRemoved;
-        _watcherUnpaired.Stopped += OnWatcherStopped;
-
-        _watcherPaired.Start();
-        _watcherUnpaired.Start();
-
-        // Stop after 15 seconds to give unpaired devices time to appear
+        // Stop after 15 seconds
         await Task.Delay(15000);
         StopScan();
     }
 
     private void StopScan()
     {
-        _watcherPaired?.Stop();
-        _watcherPaired = null;
-        _watcherUnpaired?.Stop();
-        _watcherUnpaired = null;
-
+        _watcher?.Stop();
+        _watcher = null;
         IsScanning = false;
         StatusText = $"Found {Devices.Count} device(s). Select one and click Connect.";
+    }
+
+    private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
+    {
+        var name = args.Advertisement.LocalName ?? "(Micropad)";
+        var existing = Devices.FirstOrDefault(d => d.BluetoothAddress == args.BluetoothAddress);
+        if (existing != null)
+        {
+            App.Current.Dispatcher.Invoke(() =>
+            {
+                existing.Name = name;
+                existing.Rssi = args.RawSignalStrengthInDBm;
+                OnPropertyChanged(nameof(Devices));
+            });
+            return;
+        }
+
+        App.Current.Dispatcher.Invoke(() =>
+        {
+            Devices.Add(new BleDiscoveredDevice
+            {
+                BluetoothAddress = args.BluetoothAddress,
+                Name = name,
+                Rssi = args.RawSignalStrengthInDBm
+            });
+        });
+    }
+
+    private void OnWatcherStopped(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementWatcherStoppedEventArgs args)
+    {
+        App.Current.Dispatcher.Invoke(() =>
+        {
+            if (_watcher == null)
+                IsScanning = false;
+        });
     }
 
     [RelayCommand]
@@ -110,7 +141,16 @@ public partial class DevicesViewModel : ObservableObject
                 if (backoffMs[attempt] > 0)
                     await Task.Delay(backoffMs[attempt]);
 
-                await _connection.ConnectAsync(SelectedDevice.Id);
+                // Resolve device ID from Bluetooth address (discovery was by advertisement, not DeviceInformation)
+                var device = await BluetoothLEDevice.FromBluetoothAddressAsync(SelectedDevice.BluetoothAddress);
+                if (device == null)
+                {
+                    throw new InvalidOperationException("Could not open device from address. Remove from Bluetooth settings, power-cycle Micropad, then try again.");
+                }
+                var deviceId = device.DeviceInformation.Id;
+                device.Dispose();
+
+                await _connection.ConnectAsync(deviceId);
 
                 var deviceInfo = await _protocol.GetDeviceInfoAsync();
                 if (deviceInfo != null)
@@ -121,6 +161,9 @@ public partial class DevicesViewModel : ObservableObject
 
                 IsConnected = true;
                 StatusText = "Connected";
+                var settings = _settingsStorage.Load();
+                settings.LastDeviceId = deviceId;
+                _settingsStorage.Save(settings);
                 return;
             }
             catch (Exception ex)
@@ -145,57 +188,5 @@ public partial class DevicesViewModel : ObservableObject
         {
             StatusText = $"Disconnect failed: {ex.Message}";
         }
-    }
-
-    private void OnDeviceAdded(DeviceWatcher sender, DeviceInformation device)
-    {
-        // Include devices named Micropad or ESP32 (advertised name; works for paired and unpaired)
-        bool isMicropad = (device.Name?.Contains("Micropad", StringComparison.OrdinalIgnoreCase) ?? false) ||
-                          (device.Name?.Contains("ESP32", StringComparison.OrdinalIgnoreCase) ?? false);
-
-        if (isMicropad)
-        {
-            App.Current.Dispatcher.Invoke(() =>
-            {
-                if (!Devices.Any(d => d.Id == device.Id))
-                {
-                    Devices.Add(device);
-                }
-            });
-        }
-    }
-
-    private void OnDeviceUpdated(DeviceWatcher sender, DeviceInformationUpdate deviceUpdate)
-    {
-        App.Current.Dispatcher.Invoke(() =>
-        {
-            var device = Devices.FirstOrDefault(d => d.Id == deviceUpdate.Id);
-            if (device != null)
-                device.Update(deviceUpdate);
-        });
-    }
-
-    private void OnDeviceRemoved(DeviceWatcher sender, DeviceInformationUpdate deviceUpdate)
-    {
-        App.Current.Dispatcher.Invoke(() =>
-        {
-            var device = Devices.FirstOrDefault(d => d.Id == deviceUpdate.Id);
-            if (device != null)
-            {
-                Devices.Remove(device);
-                if (SelectedDevice?.Id == deviceUpdate.Id)
-                    SelectedDevice = null;
-                // Connection drop is handled by _connection.Disconnected
-            }
-        });
-    }
-
-    private void OnWatcherStopped(DeviceWatcher sender, object args)
-    {
-        App.Current.Dispatcher.Invoke(() =>
-        {
-            if (_watcherPaired == null && _watcherUnpaired == null)
-                IsScanning = false;
-        });
     }
 }

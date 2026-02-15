@@ -35,6 +35,8 @@ public partial class App : Application
                 services.AddSingleton<IDeviceConnection, BleConnection>();
                 services.AddSingleton<ProtocolHandler>();
                 services.AddSingleton<Micropad.Services.Storage.LocalProfileStorage>();
+                services.AddSingleton<Micropad.Services.Storage.LocalMacroStorage>();
+                services.AddSingleton<Micropad.Services.Storage.SettingsStorage>();
                 services.AddSingleton<Micropad.Services.ProfileSyncService>();
                 services.AddSingleton<Micropad.Services.Input.MacroRecorder>();
 
@@ -60,6 +62,19 @@ public partial class App : Application
             .Build();
 
         await _host.StartAsync();
+
+        // Apply persisted settings: AutoReconnect and optional auto-connect to last device
+        var settingsStorage = _host.Services.GetRequiredService<Micropad.Services.Storage.SettingsStorage>();
+        var settings = settingsStorage.Load();
+        if (_host.Services.GetRequiredService<Micropad.Core.Interfaces.IDeviceConnection>() is Micropad.Services.Communication.BleConnection bleConnection)
+        {
+            bleConnection.AutoReconnect = settings.AutoReconnect;
+        }
+        if (settings.AutoConnect && !string.IsNullOrEmpty(settings.LastDeviceId))
+        {
+            var connection = _host.Services.GetRequiredService<Micropad.Core.Interfaces.IDeviceConnection>();
+            _ = connection.ConnectAsync(settings.LastDeviceId);
+        }
 
         // Show main window
         var mainWindow = _host.Services.GetRequiredService<MainWindow>();

@@ -13,6 +13,10 @@ public class MacroStep
     [JsonProperty("ms")]
     public int DelayMs { get; set; }
 
+    /// <summary>Windows virtual-key code (VK_*). Stored when recording; converted to HID usage when exporting to device.</summary>
+    [JsonProperty("vkCode")]
+    public int? VkCode { get; set; }
+
     public string DisplayText => Action switch
     {
         "keyDown" => $"Key Down: {Key}",

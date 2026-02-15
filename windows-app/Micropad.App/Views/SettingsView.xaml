@@ -65,6 +65,22 @@
                              VerticalAlignment="Center"/>
                 </Grid>
 
+                <!-- Auto Reconnect -->
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Auto Reconnect" FontWeight="Bold" 
+                                  Foreground="{StaticResource TextPrimary}" FontSize="14"/>
+                        <TextBlock Text="Reconnect with exponential backoff when connection is lost" 
+                                  Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding AutoReconnect}" 
+                             VerticalAlignment="Center"/>
+                </Grid>
+
                 <!-- Per-app profile switching -->
                 <TextBlock Text="Per-app profile switching" FontWeight="Bold" FontSize="14"
                           Foreground="{StaticResource TextPrimary}" Margin="0,15,0,8"/>

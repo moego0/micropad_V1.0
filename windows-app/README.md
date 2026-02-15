@@ -61,8 +61,10 @@ Micropad.sln
 ## Features
 
 ### Device & connection
-- **Device discovery** – Scan for Bluetooth LE devices (Micropad/ESP32)
+- **Device discovery** – Scan filtered by **Config Service UUID** `4fafc201-1fb5-459e-8fcc-c5c9c331914b` (finds the device even if the advertised name is blank or changed)
 - **Connect / disconnect** – Pair and connect to the device
+- **GattSession** – Connection uses `MaintainConnection = true` for stable BLE on Windows 11
+- **Auto-reconnect** – Optional exponential backoff when the connection drops (Settings → Auto Reconnect)
 - **Device info** – Firmware version, battery, uptime (when supported)
 
 ### Profiles
@@ -91,8 +93,11 @@ Micropad.sln
 - When the foreground window changes, the app switches to the mapped profile if connected
 
 ### Settings
-- Auto-connect, Start with Windows, Minimize to tray (UI in place; tray/startup logic can be extended)
-- Process-to-profile mapping list (add/remove)
+- **Auto Connect** – On startup, connect to the last used device (stored in `%LocalAppData%\Micropad\settings.json`)
+- **Auto Reconnect** – When connection is lost, reconnect with exponential backoff (optional)
+- **Start with Windows** – Registry Run key (add/remove)
+- **Minimize to Tray** – Keep running in system tray when closed
+- **Per-app mappings** – Process → profile ID; persisted and restored on load
 
 ## Usage
 
@@ -111,10 +116,29 @@ Micropad.sln
 
 Supported commands: `getDeviceInfo`, `listProfiles`, `getProfile`, `setProfile`, `setActiveProfile`, `getStats`, `factoryReset`, `reboot`.
 
-## Troubleshooting
+### Chunking (large messages)
+
+Messages over ~512 bytes are sent in chunks so they fit in BLE MTU.
+
+- **Send (app → device)**  
+  - Split by **UTF-8 byte length** (not string length).  
+  - Each chunk is JSON: `{"chunk":<index>,"total":<N>,"dataB64":"<base64-encoded-utf8-payload>"}`.  
+  - Base64 avoids JSON escaping issues; firmware accepts both `dataB64` (preferred) and legacy `data`.
+
+- **Receive (device → app)**  
+  - If the app receives a chunk envelope (`chunk`/`total` and `data` or `dataB64`), it reassembles chunks into one JSON string, then parses and handles as a single message (response or event).
+
+## Connection troubleshooting
+
+- **Scan finds no devices** – Ensure the Micropad is powered and advertising (Config Service UUID `4fafc201-...`). No name filter: discovery is by service UUID only.
+- **Connect fails / "FromIdAsync returned null"** – Remove the device in **Settings → Bluetooth & devices**, power-cycle the Micropad, then Scan and Connect again.
+- **"GATT services error: Unreachable"** – Device may be connected as HID only. Remove from Bluetooth, power-cycle, then Connect.
+- **"Device does not expose the Micropad config service"** – Reflash firmware that includes the config service (see Protocol (BLE GATT) above).
+- **Connection drops on Windows 11** – The app uses `GattSession` with `MaintainConnection = true`; enable **Settings → Auto Reconnect** to reattach after a drop.
+
+## Troubleshooting (general)
 
 - **Bluetooth / scan** – Enable Bluetooth (and BLE), grant app access, restart app.
-- **Connection fails** – Device on and in range; try forget and re-pair.
 - **Profile push fails** – Ensure connection is active; firmware must support `setProfile`.
 - **Stats empty** – Device must implement `getStats` and return `keyPresses`, `encoderTurns`, `uptime`.
 

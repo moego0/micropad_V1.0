@@ -18,6 +18,7 @@ public partial class ProfilesViewModel : ObservableObject
     private const int KeyCount = 12;
     private readonly ProtocolHandler _protocol;
     private readonly ProfileSyncService _syncService;
+    private readonly Micropad.Services.Storage.LocalMacroStorage _macroStorage;
 
     [ObservableProperty]
     private ObservableCollection<Profile> _profiles = new();
@@ -34,10 +35,11 @@ public partial class ProfilesViewModel : ObservableObject
     [ObservableProperty]
     private string _statusText = "Click Refresh to load profiles";
 
-    public ProfilesViewModel(ProtocolHandler protocol, ProfileSyncService syncService)
+    public ProfilesViewModel(ProtocolHandler protocol, ProfileSyncService syncService, Micropad.Services.Storage.LocalMacroStorage macroStorage)
     {
         _protocol = protocol;
         _syncService = syncService;
+        _macroStorage = macroStorage;
     }
 
     private static void EnsureKeys(Profile profile)
@@ -171,7 +173,8 @@ public partial class ProfilesViewModel : ObservableObject
         if (EditingProfile == null || index < 0 || index >= KeySlots.Count) return;
 
         var keyConfig = KeySlots[index];
-        var dialog = new ActionEditWindow(keyConfig, index)
+        var macroNames = _macroStorage.GetMacroNames();
+        var dialog = new ActionEditWindow(keyConfig, index, macroNames)
         {
             Owner = Application.Current.MainWindow
         };

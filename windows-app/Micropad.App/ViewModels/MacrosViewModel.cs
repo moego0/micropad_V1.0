@@ -13,6 +13,7 @@ namespace Micropad.App.ViewModels;
 public partial class MacrosViewModel : ObservableObject
 {
     private readonly MacroRecorder _recorder;
+    private readonly Micropad.Services.Storage.LocalMacroStorage _macroStorage;
 
     [ObservableProperty]
     private ObservableCollection<MacroStep> _steps = new();
@@ -32,9 +33,10 @@ public partial class MacrosViewModel : ObservableObject
 
     partial void OnIsRecordingChanged(bool value) => OnPropertyChanged(nameof(IsNotRecording));
 
-    public MacrosViewModel(MacroRecorder recorder)
+    public MacrosViewModel(MacroRecorder recorder, Micropad.Services.Storage.LocalMacroStorage macroStorage)
     {
         _recorder = recorder;
+        _macroStorage = macroStorage;
     }
 
     [RelayCommand]
@@ -91,6 +93,25 @@ public partial class MacrosViewModel : ObservableObject
         Steps.Clear();
         OnPropertyChanged(nameof(StepCount));
         StatusText = "Steps cleared.";
+    }
+
+    [RelayCommand]
+    private void SaveMacro()
+    {
+        var name = (MacroName ?? "").Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            StatusText = "Enter a macro name first.";
+            return;
+        }
+        if (Steps.Count == 0)
+        {
+            StatusText = "Add steps or record a macro first.";
+            return;
+        }
+        _macroStorage.SaveMacro(name, GetStepsCopy());
+        OnPropertyChanged(nameof(StepCount));
+        StatusText = $"Saved macro '{name}'.";
     }
 
     public List<MacroStep> GetStepsCopy()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 using Micropad.Core.Models;
 
 namespace Micropad.App.Dialogs;
@@ -28,7 +29,9 @@ public partial class ActionEditWindow : Window
         {"Up", 0x52}, {"Right", 0x4F}, {"Down", 0x51}, {"Win", 0xE3}
     };
 
-    public ActionEditWindow(KeyConfig keyConfig, int keyIndex)
+    public ActionEditWindow(KeyConfig keyConfig, int keyIndex) : this(keyConfig, keyIndex, null) { }
+
+    public ActionEditWindow(KeyConfig keyConfig, int keyIndex, IList<string>? macroNames)
     {
         InitializeComponent();
         _keyConfig = new KeyConfig
@@ -50,8 +53,20 @@ public partial class ActionEditWindow : Window
         LoadKeyList();
         LoadMediaList();
         LoadMouseList();
+        LoadMacroList(macroNames);
         TypeCombo.SelectionChanged += TypeCombo_SelectionChanged;
         LoadFromConfig();
+    }
+
+    private void LoadMacroList(IList<string>? macroNames)
+    {
+        MacroCombo.Items.Clear();
+        MacroCombo.Items.Add("(None)");
+        if (macroNames != null)
+        {
+            foreach (var name in macroNames)
+                MacroCombo.Items.Add(name);
+        }
     }
 
     private void LoadKeyList()
@@ -110,6 +125,10 @@ public partial class ActionEditWindow : Window
         ProfileIdInput.Text = _keyConfig.ProfileId.ToString();
         AppPathInput.Text = _keyConfig.AppPath ?? "";
         UrlInput.Text = _keyConfig.Url ?? "";
+        if (!string.IsNullOrEmpty(_keyConfig.MacroId) && MacroCombo.Items.Contains(_keyConfig.MacroId))
+            MacroCombo.SelectedItem = _keyConfig.MacroId;
+        else
+            MacroCombo.SelectedIndex = 0;
     }
 
     private void TypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -121,6 +140,8 @@ public partial class ActionEditWindow : Window
         ProfilePanel.Visibility = Visibility.Collapsed;
         AppPanel.Visibility = Visibility.Collapsed;
         UrlPanel.Visibility = Visibility.Collapsed;
+        MacroPanel.Visibility = Visibility.Collapsed;
+        UrlValidationText.Visibility = Visibility.Collapsed;
 
         if (TypeCombo.SelectedItem is ComboBoxItem item)
         {
@@ -134,6 +155,7 @@ public partial class ActionEditWindow : Window
                 case "Profile": ProfilePanel.Visibility = Visibility.Visible; break;
                 case "App": AppPanel.Visibility = Visibility.Visible; break;
                 case "Url": UrlPanel.Visibility = Visibility.Visible; break;
+                case "Macro": MacroPanel.Visibility = Visibility.Visible; break;
             }
         }
     }
@@ -157,6 +179,7 @@ public partial class ActionEditWindow : Window
             "Profile" => ActionType.Profile,
             "App" => ActionType.App,
             "Url" => ActionType.Url,
+            "Macro" => ActionType.Macro,
             _ => ActionType.None
         };
 
@@ -176,11 +199,40 @@ public partial class ActionEditWindow : Window
         if (int.TryParse(ProfileIdInput.Text, out var pid))
             _keyConfig.ProfileId = pid;
         _keyConfig.AppPath = AppPathInput.Text?.Trim();
-        _keyConfig.Url = UrlInput.Text?.Trim();
+        var url = UrlInput.Text?.Trim();
+        if (_keyConfig.Type == ActionType.Url && !string.IsNullOrEmpty(url) && !IsValidUrl(url))
+        {
+            UrlValidationText.Text = "Please enter a valid URL (e.g. https://example.com)";
+            UrlValidationText.Visibility = Visibility.Visible;
+            return;
+        }
+        _keyConfig.Url = url;
+        if (_keyConfig.Type == ActionType.Macro && MacroCombo.SelectedItem is string macroName && macroName != "(None)")
+            _keyConfig.MacroId = macroName;
+        else
+            _keyConfig.MacroId = null;
 
         Result = _keyConfig;
         DialogResult = true;
         Close();
+    }
+
+    private static bool IsValidUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private void AppBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Select application",
+            Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*"
+        };
+        if (dlg.ShowDialog() == true)
+            AppPathInput.Text = dlg.FileName;
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

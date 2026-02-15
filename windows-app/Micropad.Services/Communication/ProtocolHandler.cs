@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Micropad.Core.Interfaces;
 using Micropad.Core.Models;
 using Newtonsoft.Json;
@@ -8,8 +9,13 @@ namespace Micropad.Services.Communication;
 public class ProtocolHandler
 {
     private readonly IDeviceConnection _connection;
-    private int _nextRequestId = 1;
-    private readonly Dictionary<int, TaskCompletionSource<ProtocolMessage>> _pendingRequests = new();
+    private int _nextRequestId;
+    private readonly ConcurrentDictionary<int, TaskCompletionSource<ProtocolMessage>> _pendingRequests = new();
+
+    // Chunked receive: reassemble { "type": "chunk", ... } into full JSON before parsing
+    private readonly List<string> _chunkBuffer = new();
+    private int _chunkTotal = -1;
+    private readonly object _chunkLock = new();
 
     public event EventHandler<ProtocolMessage>? EventReceived;
 
@@ -126,7 +132,6 @@ public class ProtocolHandler
             var json = JsonConvert.SerializeObject(message);
             await _connection.SendMessageAsync(json);
 
-            // Wait for response with timeout
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             cts.Token.Register(() => tcs.TrySetCanceled());
 
@@ -134,7 +139,7 @@ public class ProtocolHandler
         }
         catch
         {
-            _pendingRequests.Remove(message.Id);
+            _pendingRequests.TryRemove(message.Id, out _);
             return null;
         }
     }
@@ -143,27 +148,93 @@ public class ProtocolHandler
     {
         try
         {
-            var message = JsonConvert.DeserializeObject<ProtocolMessage>(json);
-            if (message == null) return;
+            // Check for chunk envelope: { "type": "chunk", "chunk": i, "total": N, "data": "..." } or "dataB64": "..."
+            if (json.IndexOf("\"chunk\":", StringComparison.Ordinal) >= 0 &&
+                json.IndexOf("\"total\":", StringComparison.Ordinal) >= 0)
+            {
+                ProcessChunk(json);
+                return;
+            }
 
-            if (message.Type == "response")
-            {
-                // Handle response
-                if (_pendingRequests.TryGetValue(message.Id, out var tcs))
-                {
-                    tcs.SetResult(message);
-                    _pendingRequests.Remove(message.Id);
-                }
-            }
-            else if (message.Type == "event")
-            {
-                // Handle event
-                EventReceived?.Invoke(this, message);
-            }
+            ProcessMessage(json);
         }
         catch
         {
             // Ignore malformed messages
+        }
+    }
+
+    private void ProcessChunk(string chunkJson)
+    {
+        lock (_chunkLock)
+        {
+            JObject? obj;
+            try
+            {
+                obj = JObject.Parse(chunkJson);
+            }
+            catch
+            {
+                return;
+            }
+
+            var chunkIndex = obj["chunk"]?.Value<int>() ?? 0;
+            var total = obj["total"]?.Value<int>() ?? 0;
+            if (total <= 0) return;
+
+            string payload;
+            var dataB64 = obj["dataB64"]?.Value<string>();
+            if (!string.IsNullOrEmpty(dataB64))
+            {
+                try
+                {
+                    var bytes = Convert.FromBase64String(dataB64);
+                    payload = System.Text.Encoding.UTF8.GetString(bytes);
+                }
+                catch
+                {
+                    return;
+                }
+            }
+            else
+            {
+                payload = obj["data"]?.Value<string>() ?? "";
+                payload = payload.Replace("\\\"", "\"").Replace("\\\\", "\\");
+            }
+
+            if (chunkIndex == 0)
+            {
+                _chunkBuffer.Clear();
+                _chunkTotal = total;
+            }
+
+            if (_chunkTotal != total) return;
+            while (_chunkBuffer.Count <= chunkIndex)
+                _chunkBuffer.Add("");
+            _chunkBuffer[chunkIndex] = payload;
+
+            if (_chunkBuffer.Count != _chunkTotal) return;
+
+            var full = string.Concat(_chunkBuffer);
+            _chunkBuffer.Clear();
+            _chunkTotal = -1;
+            ProcessMessage(full);
+        }
+    }
+
+    private void ProcessMessage(string json)
+    {
+        var message = JsonConvert.DeserializeObject<ProtocolMessage>(json);
+        if (message == null) return;
+
+        if (message.Type == "response")
+        {
+            if (_pendingRequests.TryRemove(message.Id, out var tcs))
+                tcs.TrySetResult(message);
+        }
+        else if (message.Type == "event")
+        {
+            EventReceived?.Invoke(this, message);
         }
     }
 

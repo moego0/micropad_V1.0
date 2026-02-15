@@ -29,6 +29,7 @@
                 <ComboBoxItem Content="Switch Profile" Tag="Profile"/>
                 <ComboBoxItem Content="Launch App" Tag="App"/>
                 <ComboBoxItem Content="Open URL" Tag="Url"/>
+                <ComboBoxItem Content="Macro" Tag="Macro"/>
             </ComboBox>
         </StackPanel>
 
@@ -75,14 +76,30 @@
                 <!-- App -->
                 <StackPanel x:Name="AppPanel" Visibility="Collapsed">
                     <TextBlock Text="Application path" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
-                    <TextBox x:Name="AppPathInput" Height="28" Background="{StaticResource BgInput}"
-                             Foreground="{StaticResource TextPrimary}" Padding="8,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="AppPathInput" Height="28" Background="{StaticResource BgInput}"
+                                 Foreground="{StaticResource TextPrimary}" Padding="8,4" Margin="0,0,8,0"/>
+                        <Button Grid.Column="1" x:Name="AppBrowseButton" Content="Browse..." Padding="8,4" Height="28"
+                                Background="{StaticResource BgTertiary}" Foreground="{StaticResource TextPrimary}"
+                                BorderThickness="0" Cursor="Hand" Click="AppBrowse_Click"/>
+                    </Grid>
                 </StackPanel>
                 <!-- URL -->
                 <StackPanel x:Name="UrlPanel" Visibility="Collapsed">
                     <TextBlock Text="URL" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
                     <TextBox x:Name="UrlInput" Height="28" Background="{StaticResource BgInput}"
                              Foreground="{StaticResource TextPrimary}" Padding="8,4"/>
+                    <TextBlock x:Name="UrlValidationText" Foreground="#DC3545" FontSize="11" Margin="0,4,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+                <!-- Macro -->
+                <StackPanel x:Name="MacroPanel" Visibility="Collapsed">
+                    <TextBlock Text="Macro" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="MacroCombo" Height="28" Background="{StaticResource BgInput}"
+                              Foreground="{StaticResource TextPrimary}" Padding="6,4"/>
                 </StackPanel>
             </StackPanel>
         </Border>

@@ -56,18 +56,14 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Column="0" Text="📱" FontSize="16" Margin="0,0,10,0"/>
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Id}" FontSize="10" 
+                                        <TextBlock Text="{Binding DisplayId}" FontSize="10" 
                                                   Foreground="{StaticResource TextSecondary}"/>
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="✓ Paired" 
-                                              Foreground="#28A745"
-                                              Visibility="{Binding IsPaired, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
