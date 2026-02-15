@@ -105,9 +105,9 @@
 
         <!-- Status -->
         <StackPanel Grid.Row="2" Margin="0,10,0,0">
-            <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
-            <TextBlock Text="First time? Scan will find the Micropad even if this PC has never connected. Click Connect to pair and connect." 
-                       Foreground="{StaticResource TextTertiary}" FontSize="11" Margin="0,4,0,0"/>
+            <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" MaxHeight="80"/>
+            <TextBlock Text="If Connect fails: Settings → Bluetooth → remove Micropad, power-cycle the Micropad, then Scan and Connect again." 
+                       Foreground="{StaticResource TextTertiary}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
     </Grid>
 </Page>

@@ -93,7 +93,7 @@ const uint8_t COL_PINS[MATRIX_COLS] = {21, 22, 23, 19};
 // ============================================
 
 #define DEBUG_SERIAL Serial
-#define DEBUG_ENABLED true
+#define DEBUG_ENABLED false
 
 #if DEBUG_ENABLED
     #define DEBUG_PRINT(x) DEBUG_SERIAL.print(x)

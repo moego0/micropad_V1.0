@@ -108,7 +108,8 @@ public partial class DevicesViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Connection failed: {ex.Message}";
+            var msg = ex.InnerException != null ? $"{ex.Message} ({ex.InnerException.Message})" : ex.Message;
+            StatusText = $"Connection failed: {msg}";
         }
     }
 

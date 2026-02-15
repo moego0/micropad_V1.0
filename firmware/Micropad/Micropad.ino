@@ -56,75 +56,43 @@ Preferences preferences;
 // Setup Function
 // ============================================
 void setup() {
-    // Initialize serial for debugging
     Serial.begin(115200);
-    delay(1000);  // Wait for serial to initialize
-    
-    DEBUG_PRINTLN("========================================");
-    DEBUG_PRINTLN("Micropad Firmware " FIRMWARE_VERSION);
-    DEBUG_PRINTLN("========================================");
-    
-    // 1. Initialize input hardware
-    DEBUG_PRINTLN("Initializing input hardware...");
+    delay(500);
+
     matrix.init();
     encoder1.init(ENC1_PIN_A, ENC1_PIN_B, ENC1_PIN_SW);
     encoder2.init(ENC2_PIN_A, ENC2_PIN_B, ENC2_PIN_SW);
-    
-    // 2. Initialize profile manager (loads from storage)
-    DEBUG_PRINTLN("Initializing profile manager...");
+
     if (!profileManager.init()) {
-        DEBUG_PRINTLN("ERROR: Failed to initialize profile manager!");
-        // Continue anyway with default profile
+        // Continue with default profile
     }
-    
-    // 3. Setup key combos for profile switching
-    DEBUG_PRINTLN("Setting up key combos...");
-    comboDetector.addCombo(0, 3, 800);   // K1 + K4 = Switch to profile 1
-    comboDetector.addCombo(0, 11, 800);  // K1 + K12 = Switch to profile 0
-    
-    // 4. Start BLE HID
-    DEBUG_PRINTLN("Starting BLE HID...");
+
+    comboDetector.addCombo(0, 3, 800);   // K1 + K4 = profile 1
+    comboDetector.addCombo(0, 11, 800);  // K1 + K12 = profile 0
+
+    setCpuFrequencyMhz(80);
     bleKeyboard.begin(BLE_DEVICE_NAME, BLE_MANUFACTURER);
-    
-    // 5. Initialize protocol handler
+    setCpuFrequencyMhz(160);
+
     protocolHandler.init(&profileManager);
-    
-    // 6. Start BLE Config Service
     bleConfig.begin(&protocolHandler);
     protocolHandler.setBLEService(&bleConfig);
-    
-    // 7. Start WiFi (optional, based on preferences)
-    preferences.begin(PREFS_NAMESPACE, true);  // Read-only
+
+    preferences.begin(PREFS_NAMESPACE, true);
     bool wifiEnabled = preferences.getBool("wifiEnabled", false);
-    
     if (wifiEnabled) {
         String ssid = preferences.getString("wifiSSID", "");
         String pass = preferences.getString("wifiPass", "");
-        
-        if (ssid.length() > 0) {
-            DEBUG_PRINTLN("Starting WiFi...");
-            if (wifiManager.connectSTA(ssid.c_str(), pass.c_str(), 10000)) {
-                // Start mDNS
-                wifiManager.startMDNS(MDNS_HOSTNAME);
-                
-                // Start WebSocket server
-                wsServer.begin(WEBSOCKET_PORT, &protocolHandler);
-            }
+        if (ssid.length() > 0 && wifiManager.connectSTA(ssid.c_str(), pass.c_str(), 10000)) {
+            wifiManager.startMDNS(MDNS_HOSTNAME);
+            wsServer.begin(WEBSOCKET_PORT, &protocolHandler);
         }
-    } else {
-        DEBUG_PRINTLN("WiFi disabled (enable via preferences)");
     }
     preferences.end();
-    
-    // 8. Initialize action executor
+
     actionExecutor.init(&bleKeyboard);
-    
-    DEBUG_PRINTLN("========================================");
-    DEBUG_PRINTF("Active Profile: %d - %s\n", 
-                 profileManager.getActiveProfileId(), 
-                 profileManager.getCurrentProfile()->name);
-    DEBUG_PRINTLN("Micropad ready! Waiting for BLE connection...");
-    DEBUG_PRINTLN("========================================");
+
+    Serial.println("Micropad ready");
 }
 
 // ============================================
@@ -133,7 +101,7 @@ void setup() {
 void loop() {
     // Update BLE connection status
     bleKeyboard.update();
-    // Restart BLE advertising if not connected (helps Windows reconnect)
+    // Restart BLE advertising if not connected (throttled to every 30s in ble_hid)
     bleKeyboard.restartAdvertisingIfNeeded();
     
     // Scan matrix for key presses

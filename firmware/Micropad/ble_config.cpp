@@ -54,13 +54,13 @@ void BLEConfigService::begin(ProtocolHandler* handler) {
     );
     _bulkChar->setCallbacks(new ConfigCharCallbacks());
     
-    // Start the service
+    // Start the service (config is on same server; clients see it after connecting)
     _configService->start();
     
-    // Update advertising to include config service
-    NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
-    advertising->addServiceUUID(_configService->getUUID());
-    advertising->start();
+    // Do NOT add config service UUID to advertising or call start() again.
+    // The 31-byte BLE ad limit gets exceeded (HID + Device Info + Battery + 128-bit config UUID),
+    // which can drop the device name or discoverable flag so the device doesn't appear in scan.
+    // Advertising was already started in ble_hid with name + discoverable; leave it as-is.
     
     DEBUG_PRINTLN("BLE Config Service started");
 }
@@ -191,15 +191,15 @@ void ConfigCharCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEC
     }
 }
 
-// Server callbacks
+// Server callbacks: accept connection, restart ad when disconnected (no param update - Windows drops otherwise)
 void ConfigServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
-    DEBUG_PRINTLN("BLE Config client connected");
-    // Update connection parameters for Windows stability (30-50ms interval, 4s timeout)
-    pServer->updateConnParams(connInfo.getConnHandle(), 24, 40, 0, 400);
+    (void)pServer;
+    (void)connInfo;
 }
 
 void ConfigServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
-    DEBUG_PRINTLN("BLE Config client disconnected");
-    // Restart advertising so Windows (or other hosts) can connect again
+    (void)pServer;
+    (void)connInfo;
+    (void)reason;
     NimBLEDevice::startAdvertising();
 }
