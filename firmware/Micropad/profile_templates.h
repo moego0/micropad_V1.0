@@ -1,8 +1,8 @@
 #ifndef PROFILE_TEMPLATES_H
 #define PROFILE_TEMPLATES_H
 
-#include "profiles/profile.h"
-#include "comms/ble_hid.h"
+#include "profile.h"
+#include "ble_hid.h"
 
 // VS Code Profile
 inline Profile createVSCodeProfile() {

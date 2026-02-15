@@ -1,6 +1,9 @@
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 using Micropad.Core.Interfaces;
 
@@ -26,55 +29,59 @@ public class BleConnection : IDeviceConnection
 
     public async Task<bool> ConnectAsync(string deviceId)
     {
-        try
+        _device = await BluetoothLEDevice.FromIdAsync(deviceId);
+        if (_device == null)
         {
-            // Connect to device
-            _device = await BluetoothLEDevice.FromIdAsync(deviceId);
-            if (_device == null)
-            {
-                return false;
-            }
-
-            // Get config service
-            var servicesResult = await _device.GetGattServicesForUuidAsync(_configServiceUuid);
-            if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
-            {
-                return false;
-            }
-
-            _configService = servicesResult.Services[0];
-
-            // Get CMD characteristic
-            var cmdResult = await _configService.GetCharacteristicsForUuidAsync(_cmdCharUuid);
-            if (cmdResult.Status != GattCommunicationStatus.Success || cmdResult.Characteristics.Count == 0)
-            {
-                return false;
-            }
-            _cmdChar = cmdResult.Characteristics[0];
-
-            // Get EVT characteristic
-            var evtResult = await _configService.GetCharacteristicsForUuidAsync(_evtCharUuid);
-            if (evtResult.Status != GattCommunicationStatus.Success || evtResult.Characteristics.Count == 0)
-            {
-                return false;
-            }
-            _evtChar = evtResult.Characteristics[0];
-
-            // Subscribe to notifications
-            var cccdValue = GattClientCharacteristicConfigurationDescriptorValue.Notify;
-            await _evtChar.WriteClientCharacteristicConfigurationDescriptorAsync(cccdValue);
-            _evtChar.ValueChanged += OnValueChanged;
-
-            // Listen for disconnection
-            _device.ConnectionStatusChanged += OnConnectionStatusChanged;
-
-            Connected?.Invoke(this, EventArgs.Empty);
-            return true;
+            throw new InvalidOperationException("Could not open the device. Ensure Bluetooth is on and the Micropad is in range.");
         }
-        catch
+
+        // First-time connection: pair if not already paired (no PIN needed with ProtectionLevel.None)
+        if (!_device.DeviceInformation.Pairing.IsPaired)
         {
-            return false;
+            var pairingResult = await _device.DeviceInformation.Pairing.PairAsync(
+                DevicePairingProtectionLevel.None);
+            if (pairingResult.Status != DevicePairingResultStatus.Paired &&
+                pairingResult.Status != DevicePairingResultStatus.AlreadyPaired)
+            {
+                throw new InvalidOperationException(
+                    $"Pairing failed: {pairingResult.Status}. Accept any pairing prompt on the PC or try again.");
+            }
         }
+
+        var servicesResult = await _device.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+        if (servicesResult.Status != GattCommunicationStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"GATT error: {servicesResult.Status}. Ensure the Micropad firmware is running and supports the config service.");
+        }
+        _configService = servicesResult.Services.FirstOrDefault(s => s.Uuid == _configServiceUuid);
+        if (_configService == null)
+        {
+            throw new InvalidOperationException("Device does not expose the Micropad config service. Check firmware.");
+        }
+
+        var cmdResult = await _configService.GetCharacteristicsForUuidAsync(_cmdCharUuid);
+        if (cmdResult.Status != GattCommunicationStatus.Success || cmdResult.Characteristics.Count == 0)
+        {
+            throw new InvalidOperationException("Config command characteristic not found. Check firmware.");
+        }
+        _cmdChar = cmdResult.Characteristics[0];
+
+        var evtResult = await _configService.GetCharacteristicsForUuidAsync(_evtCharUuid);
+        if (evtResult.Status != GattCommunicationStatus.Success || evtResult.Characteristics.Count == 0)
+        {
+            throw new InvalidOperationException("Config event characteristic not found. Check firmware.");
+        }
+        _evtChar = evtResult.Characteristics[0];
+
+        var cccdValue = GattClientCharacteristicConfigurationDescriptorValue.Notify;
+        await _evtChar.WriteClientCharacteristicConfigurationDescriptorAsync(cccdValue);
+        _evtChar.ValueChanged += OnValueChanged;
+
+        _device.ConnectionStatusChanged += OnConnectionStatusChanged;
+
+        Connected?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     public async Task DisconnectAsync()

@@ -2,7 +2,7 @@
 #define ENCODER_H
 
 #include <Arduino.h>
-#include "../config.h"
+#include "config.h"
 
 class RotaryEncoder {
 public:

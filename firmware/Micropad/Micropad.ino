@@ -24,17 +24,17 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "config.h"
-#include "input/matrix.h"
-#include "input/encoder.h"
-#include "input/combo_detector.h"
-#include "comms/ble_hid.h"
-#include "comms/ble_config.h"
-#include "comms/protocol_handler.h"
-#include "comms/wifi_manager.h"
-#include "comms/websocket_server.h"
-#include "actions/action_executor.h"
-#include "profiles/profile.h"
-#include "profiles/profile_manager.h"
+#include "matrix.h"
+#include "encoder.h"
+#include "combo_detector.h"
+#include "ble_hid.h"
+#include "ble_config.h"
+#include "protocol_handler.h"
+#include "wifi_manager.h"
+#include "websocket_server.h"
+#include "action_executor.h"
+#include "profile.h"
+#include "profile_manager.h"
 
 // ============================================
 // Global Objects

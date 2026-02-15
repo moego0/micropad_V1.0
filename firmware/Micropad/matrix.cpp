@@ -1,4 +1,4 @@
-#include "input/matrix.h"
+#include "matrix.h"
 
 KeyMatrix::KeyMatrix() {
     // Initialize all states to false

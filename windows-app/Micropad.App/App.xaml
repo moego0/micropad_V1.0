@@ -1,20 +1,49 @@
 <Application x:Class="Micropad.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+>
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Dark Theme Colors -->
-            <SolidColorBrush x:Key="BackgroundPrimary" Color="#2B2F33"/>
-            <SolidColorBrush x:Key="BackgroundSecondary" Color="#353A40"/>
-            <SolidColorBrush x:Key="BorderColor" Color="#4A5157"/>
-            <SolidColorBrush x:Key="TextPrimary" Color="#E8E8E8"/>
-            <SolidColorBrush x:Key="TextSecondary" Color="#B0B0B0"/>
+            <!-- Modern Dark Theme (UI/UX Improvements) -->
+            <!-- Background -->
+            <SolidColorBrush x:Key="BgPrimary" Color="#1E1E1E"/>
+            <SolidColorBrush x:Key="BgSecondary" Color="#252526"/>
+            <SolidColorBrush x:Key="BgTertiary" Color="#2D2D30"/>
+            <SolidColorBrush x:Key="BgInput" Color="#3E3E42"/>
+
+            <!-- Border & Divider -->
+            <SolidColorBrush x:Key="Border" Color="#3F3F46"/>
+            <SolidColorBrush x:Key="Divider" Color="#2E2E32"/>
+
+            <!-- Text -->
+            <SolidColorBrush x:Key="TextPrimary" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="TextSecondary" Color="#CCCCCC"/>
+            <SolidColorBrush x:Key="TextTertiary" Color="#999999"/>
+            <SolidColorBrush x:Key="TextDisabled" Color="#6E6E6E"/>
+
+            <!-- Accent -->
+            <SolidColorBrush x:Key="AccentPrimary" Color="#0078D4"/>
+            <SolidColorBrush x:Key="AccentHover" Color="#1E88E5"/>
+            <SolidColorBrush x:Key="AccentPressed" Color="#0D5E9E"/>
+            <SolidColorBrush x:Key="AccentGlow" Color="#4D0078D4"/>
+
+            <!-- Status -->
+            <SolidColorBrush x:Key="Success" Color="#10B981"/>
+            <SolidColorBrush x:Key="Warning" Color="#F59E0B"/>
+            <SolidColorBrush x:Key="Error" Color="#EF4444"/>
+            <SolidColorBrush x:Key="Info" Color="#3B82F6"/>
+
+            <!-- Legacy keys (same theme, for existing views) -->
+            <SolidColorBrush x:Key="BackgroundPrimary" Color="#1E1E1E"/>
+            <SolidColorBrush x:Key="BackgroundSecondary" Color="#252526"/>
+            <SolidColorBrush x:Key="BackgroundTertiary" Color="#2D2D30"/>
+            <SolidColorBrush x:Key="BorderColor" Color="#3F3F46"/>
             <SolidColorBrush x:Key="AccentBlue" Color="#0078D4"/>
-            <SolidColorBrush x:Key="BackgroundTertiary" Color="#3E4349"/>
-            <SolidColorBrush x:Key="AccentHover" Color="#1084D8"/>
-            <SolidColorBrush x:Key="Success" Color="#28A745"/>
-            <SolidColorBrush x:Key="Error" Color="#DC3545"/>
-            
+
+            <!-- Typography -->
+            <FontFamily x:Key="MainFont">Segoe UI Variable Display, Segoe UI</FontFamily>
+            <FontFamily x:Key="MonoFont">Cascadia Code, Consolas</FontFamily>
+
             <!-- Converters -->
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         </ResourceDictionary>

@@ -1,5 +1,5 @@
-#include "comms/websocket_server.h"
-#include "comms/protocol_handler.h"
+#include "websocket_server.h"
+#include "protocol_handler.h"
 
 WebSocketServer::WebSocketServer() {
     _server = nullptr;

@@ -1,5 +1,4 @@
-#include "profiles/profile_storage.h"
-#include <new>
+#include "profile_storage.h"
 
 ProfileStorage::ProfileStorage() {
     _initialized = false;
@@ -39,30 +38,24 @@ bool ProfileStorage::saveProfile(const Profile& profile) {
     
     DEBUG_PRINTF("Saving profile %d: %s\n", profile.id, profile.name);
     
-    // Use heap to avoid stack overflow (DynamicJsonDocument 4096 is too large for stack)
-    DynamicJsonDocument* doc = new (std::nothrow) DynamicJsonDocument(4096);
-    if (!doc) {
-        DEBUG_PRINTLN("ERROR: Failed to allocate JSON doc");
-        return false;
-    }
+    // Create JSON document (allocate enough space)
+    DynamicJsonDocument doc(4096);
     
-    bool ok = _serializeProfile(profile, *doc);
-    if (!ok) {
+    if (!_serializeProfile(profile, doc)) {
         DEBUG_PRINTLN("ERROR: Failed to serialize profile");
-        delete doc;
         return false;
     }
     
+    // Write to temporary file first (atomic write)
     String tempPath = _getProfilePath(profile.id) + ".tmp";
     File file = LittleFS.open(tempPath, "w");
+    
     if (!file) {
         DEBUG_PRINTLN("ERROR: Failed to open file for writing");
-        delete doc;
         return false;
     }
     
-    size_t bytesWritten = serializeJson(*doc, file);
-    delete doc;
+    size_t bytesWritten = serializeJson(doc, file);
     file.close();
     
     if (bytesWritten == 0) {
@@ -71,8 +64,9 @@ bool ProfileStorage::saveProfile(const Profile& profile) {
         return false;
     }
     
+    // Rename temp file to actual file (atomic operation)
     String actualPath = _getProfilePath(profile.id);
-    LittleFS.remove(actualPath);
+    LittleFS.remove(actualPath);  // Remove old file if exists
     LittleFS.rename(tempPath, actualPath);
     
     DEBUG_PRINTF("Profile saved successfully (%d bytes)\n", bytesWritten);
@@ -100,24 +94,16 @@ bool ProfileStorage::loadProfile(uint8_t id, Profile& profile) {
         return false;
     }
     
-    DynamicJsonDocument* doc = new (std::nothrow) DynamicJsonDocument(4096);
-    if (!doc) {
-        file.close();
-        DEBUG_PRINTLN("ERROR: Failed to allocate JSON doc");
-        return false;
-    }
-    DeserializationError error = deserializeJson(*doc, file);
+    DynamicJsonDocument doc(4096);
+    DeserializationError error = deserializeJson(doc, file);
     file.close();
     
     if (error) {
         DEBUG_PRINTF("ERROR: JSON deserialization failed: %s\n", error.c_str());
-        delete doc;
         return false;
     }
     
-    bool ok = _deserializeProfile(*doc, profile);
-    delete doc;
-    if (!ok) {
+    if (!_deserializeProfile(doc, profile)) {
         DEBUG_PRINTLN("ERROR: Failed to deserialize profile");
         return false;
     }
@@ -248,16 +234,16 @@ bool ProfileStorage::_deserializeProfile(const JsonDocument& doc, Profile& profi
     strlcpy(profile.name, doc["name"] | "Unnamed", sizeof(profile.name));
     profile.version = doc["version"] | 1;
     
-    // Deserialize keys (ArduinoJson v7: use as<JsonArrayConst> for const doc)
+    // Deserialize keys (ArduinoJson 7: use as<JsonArrayConst> for const doc)
     JsonArrayConst keysArray = doc["keys"].as<JsonArrayConst>();
-    for (size_t i = 0; i < (size_t)MATRIX_KEYS && i < keysArray.size(); i++) {
+    for (uint8_t i = 0; i < MATRIX_KEYS && i < keysArray.size(); i++) {
         JsonObjectConst keyObj = keysArray[i].as<JsonObjectConst>();
         _deserializeAction(keyObj, profile.keys[i].action);
     }
     
     // Deserialize encoders
     JsonArrayConst encodersArray = doc["encoders"].as<JsonArrayConst>();
-    for (size_t i = 0; i < 2 && i < encodersArray.size(); i++) {
+    for (uint8_t i = 0; i < 2 && i < encodersArray.size(); i++) {
         JsonObjectConst encObj = encodersArray[i].as<JsonObjectConst>();
         
         _deserializeAction(encObj["cwAction"].as<JsonObjectConst>(), profile.encoders[i].cwAction);

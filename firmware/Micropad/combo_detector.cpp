@@ -1,4 +1,4 @@
-#include "input/combo_detector.h"
+#include "combo_detector.h"
 
 ComboDetector::ComboDetector() {
     _comboCount = 0;

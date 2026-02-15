@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include "../config.h"
+#include "config.h"
 
 // Forward declaration
 class ProtocolHandler;

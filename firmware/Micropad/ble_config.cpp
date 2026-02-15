@@ -1,5 +1,5 @@
-#include "comms/ble_config.h"
-#include "comms/protocol_handler.h"
+#include "ble_config.h"
+#include "protocol_handler.h"
 
 BLEConfigService* BLEConfigService::_instance = nullptr;
 
@@ -184,19 +184,22 @@ void BLEConfigService::sendChunked(const String& message) {
     DEBUG_PRINTLN("Chunked message sent");
 }
 
+// Characteristic callbacks
+void ConfigCharCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
+    if (BLEConfigService::_instance) {
+        BLEConfigService::_instance->handleWrite(pCharacteristic);
+    }
+}
+
 // Server callbacks
 void ConfigServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
     DEBUG_PRINTLN("BLE Config client connected");
+    // Update connection parameters for Windows stability (30-50ms interval, 4s timeout)
+    pServer->updateConnParams(connInfo.getConnHandle(), 24, 40, 0, 400);
 }
 
 void ConfigServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
     DEBUG_PRINTLN("BLE Config client disconnected");
+    // Restart advertising so Windows (or other hosts) can connect again
     NimBLEDevice::startAdvertising();
-}
-
-void ConfigCharCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
-    (void)connInfo;
-    if (BLEConfigService::_instance) {
-        BLEConfigService::_instance->handleWrite(pCharacteristic);
-    }
 }

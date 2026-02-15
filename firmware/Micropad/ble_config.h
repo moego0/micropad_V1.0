@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
-#include "../config.h"
+#include "config.h"
 
 // Forward declaration
 class ProtocolHandler;
@@ -49,15 +49,17 @@ private:
     void sendChunked(const String& message);
 };
 
-// Server callbacks
+// Server callbacks (NimBLE 1.4 uses NimBLEConnInfo in callbacks)
 class ConfigServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override;
-    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override;
+public:
+    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo);
+    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason);
 };
 
 // Characteristic write callbacks (for CMD and BULK)
 class ConfigCharCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override;
+public:
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo);
 };
 
 #endif // BLE_CONFIG_H

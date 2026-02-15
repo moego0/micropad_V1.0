@@ -15,7 +15,8 @@ public partial class DevicesViewModel : ObservableObject
 {
     private readonly IDeviceConnection _connection;
     private readonly ProtocolHandler _protocol;
-    private DeviceWatcher? _watcher;
+    private DeviceWatcher? _watcherPaired;
+    private DeviceWatcher? _watcherUnpaired;
 
     [ObservableProperty]
     private ObservableCollection<DeviceInformation> _devices = new();
@@ -35,10 +36,13 @@ public partial class DevicesViewModel : ObservableObject
     [ObservableProperty]
     private string _deviceInfo = "Select a device to view info";
 
-    public DevicesViewModel(IDeviceConnection connection, ProtocolHandler protocol)
+    private readonly MainViewModel _mainViewModel;
+
+    public DevicesViewModel(IDeviceConnection connection, ProtocolHandler protocol, MainViewModel mainViewModel)
     {
         _connection = connection;
         _protocol = protocol;
+        _mainViewModel = mainViewModel;
     }
 
     [RelayCommand]
@@ -46,32 +50,39 @@ public partial class DevicesViewModel : ObservableObject
     {
         Devices.Clear();
         IsScanning = true;
-        StatusText = "Scanning for devices...";
+        StatusText = "Scanning for Micropad (paired and unpaired)...";
 
-        string selector = BluetoothLEDevice.GetDeviceSelector();
-        _watcher = DeviceInformation.CreateWatcher(selector);
+        // Watch BOTH paired and unpaired BLE devices so first-time use works
+        string selectorPaired = BluetoothLEDevice.GetDeviceSelectorFromPairingState(true);
+        string selectorUnpaired = BluetoothLEDevice.GetDeviceSelectorFromPairingState(false);
 
-        _watcher.Added += OnDeviceAdded;
-        _watcher.Updated += OnDeviceUpdated;
-        _watcher.Stopped += OnWatcherStopped;
+        _watcherPaired = DeviceInformation.CreateWatcher(selectorPaired);
+        _watcherUnpaired = DeviceInformation.CreateWatcher(selectorUnpaired);
 
-        _watcher.Start();
+        _watcherPaired.Added += OnDeviceAdded;
+        _watcherPaired.Updated += OnDeviceUpdated;
+        _watcherPaired.Stopped += OnWatcherStopped;
+        _watcherUnpaired.Added += OnDeviceAdded;
+        _watcherUnpaired.Updated += OnDeviceUpdated;
+        _watcherUnpaired.Stopped += OnWatcherStopped;
 
-        // Stop after 10 seconds
-        await Task.Delay(10000);
+        _watcherPaired.Start();
+        _watcherUnpaired.Start();
+
+        // Stop after 15 seconds to give unpaired devices time to appear
+        await Task.Delay(15000);
         StopScan();
     }
 
     private void StopScan()
     {
-        if (_watcher != null)
-        {
-            _watcher.Stop();
-            _watcher = null;
-        }
+        _watcherPaired?.Stop();
+        _watcherPaired = null;
+        _watcherUnpaired?.Stop();
+        _watcherUnpaired = null;
 
         IsScanning = false;
-        StatusText = $"Found {Devices.Count} device(s)";
+        StatusText = $"Found {Devices.Count} device(s). Select one and click Connect.";
     }
 
     [RelayCommand]
@@ -89,6 +100,7 @@ public partial class DevicesViewModel : ObservableObject
             if (deviceInfo != null)
             {
                 DeviceInfo = $"ID: {deviceInfo.DeviceId}\nFW: {deviceInfo.FirmwareVersion}\nHW: {deviceInfo.HardwareVersion}\nBattery: {deviceInfo.BatteryLevel}%";
+                _mainViewModel.SetBatteryLevel(deviceInfo.BatteryLevel);
             }
 
             IsConnected = true;
@@ -118,8 +130,11 @@ public partial class DevicesViewModel : ObservableObject
 
     private void OnDeviceAdded(DeviceWatcher sender, DeviceInformation device)
     {
-        // Filter for "Micropad" devices
-        if (device.Name.Contains("Micropad", StringComparison.OrdinalIgnoreCase))
+        // Include devices named Micropad or ESP32 (advertised name; works for paired and unpaired)
+        bool isMicropad = (device.Name?.Contains("Micropad", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                          (device.Name?.Contains("ESP32", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        if (isMicropad)
         {
             App.Current.Dispatcher.Invoke(() =>
             {
@@ -147,7 +162,8 @@ public partial class DevicesViewModel : ObservableObject
     {
         App.Current.Dispatcher.Invoke(() =>
         {
-            IsScanning = false;
+            if (_watcherPaired == null && _watcherUnpaired == null)
+                IsScanning = false;
         });
     }
 }

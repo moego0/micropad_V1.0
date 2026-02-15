@@ -2,7 +2,7 @@
 #define COMBO_DETECTOR_H
 
 #include <Arduino.h>
-#include "../config.h"
+#include "config.h"
 
 struct KeyCombo {
     uint8_t key1;

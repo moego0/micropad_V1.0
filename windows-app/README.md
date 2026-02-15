@@ -19,6 +19,12 @@ dotnet build
 dotnet run --project Micropad.App
 ```
 
+**If build fails with "file is locked" / "being used by another process"**: the app is already running and has locked its DLLs. Either close Micropad.App and run again, or use the helper script which closes any existing instance first:
+
+```powershell
+.\run-app.ps1
+```
+
 Publish for distribution:
 
 ```bash

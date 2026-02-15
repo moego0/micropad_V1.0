@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <NimBLEHIDDevice.h>
-#include "../config.h"
+#include "config.h"
 
 // HID Key codes (standard USB HID)
 #define KEY_A 0x04

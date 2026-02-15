@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
-#include "../config.h"
+#include "config.h"
 
 class WiFiManager {
 public:

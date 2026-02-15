@@ -1,10 +1,11 @@
 <Window x:Class="Micropad.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Micropad" Height="600" Width="900"
+        Title="Micropad" Height="640" Width="960"
+        MinHeight="500" MinWidth="800"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource BackgroundPrimary}">
-    
+        Background="{StaticResource BgPrimary}">
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -14,54 +15,116 @@
         <!-- Main Content -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Navigation -->
-            <Border Grid.Column="0" Background="{StaticResource BackgroundSecondary}" 
-                    BorderBrush="{StaticResource BorderColor}" BorderThickness="0,0,1,0">
-                <StackPanel>
-                    <TextBlock Text="MICROPAD" FontSize="18" FontWeight="Bold" 
-                              Foreground="{StaticResource TextPrimary}" 
-                              Margin="15,20,15,30"/>
-                    
-                    <ListBox x:Name="NavigationList" Background="Transparent" BorderThickness="0"
-                            SelectionChanged="NavigationList_SelectionChanged">
-                        <ListBoxItem Content="Devices" FontSize="14" Padding="15,10"/>
-                        <ListBoxItem Content="Profiles" FontSize="14" Padding="15,10"/>
-                        <ListBoxItem Content="Macros" FontSize="14" Padding="15,10"/>
-                        <ListBoxItem Content="Stats" FontSize="14" Padding="15,10"/>
-                        <ListBoxItem Content="Settings" FontSize="14" Padding="15,10"/>
+            <!-- Navigation Sidebar -->
+            <Border Grid.Column="0" Background="{StaticResource BgSecondary}"
+                    BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="MICROPAD" FontSize="18" FontWeight="SemiBold"
+                              Foreground="{StaticResource TextPrimary}"
+                              Margin="20,24,20,28"/>
+
+                    <ListBox x:Name="NavigationList" Grid.Row="1" Background="Transparent" BorderThickness="0"
+                             SelectionChanged="NavigationList_SelectionChanged"
+                             Padding="8,0,8,12">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="12,12"/>
+                                <Setter Property="Margin" Value="0,2"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                                <Setter Property="FontSize" Value="14"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{StaticResource AccentPrimary}"
+                                                    BorderThickness="3,0,0,0" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource BgTertiary}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource BgTertiary}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBoxItem Content="Devices"/>
+                        <ListBoxItem Content="Profiles"/>
+                        <ListBoxItem Content="Macros"/>
+                        <ListBoxItem Content="Stats"/>
+                        <ListBoxItem Content="Settings"/>
                     </ListBox>
-                </StackPanel>
+                </Grid>
             </Border>
 
             <!-- Content Frame -->
-            <Frame x:Name="ContentFrame" Grid.Column="1" NavigationUIVisibility="Hidden" 
-                   Background="{StaticResource BackgroundPrimary}"/>
+            <Frame x:Name="ContentFrame" Grid.Column="1" NavigationUIVisibility="Hidden"
+                   Background="{StaticResource BgPrimary}"/>
         </Grid>
 
-        <!-- Status Bar -->
-        <Border Grid.Row="1" Background="{StaticResource BackgroundSecondary}" 
-                BorderBrush="{StaticResource BorderColor}" 
-                BorderThickness="0,1,0,0" Padding="10,8">
+        <!-- Status Bar (Connection indicator, battery, last sync) -->
+        <Border Grid.Row="1" Background="{StaticResource BgSecondary}"
+                BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="{Binding StatusText}" 
-                          Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="{Binding ConnectionStatus}" 
-                          Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="10,0"/>
-                <TextBlock Grid.Column="2" Text="{Binding BatteryLevel}" 
-                          Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="10,0"/>
-                <TextBlock Grid.Column="3" Text="v1.0.0" 
-                          Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="10,0"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondary}"
+                              FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock Text=" • " Foreground="{StaticResource TextTertiary}" FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock Foreground="{StaticResource TextTertiary}" FontSize="12" VerticalAlignment="Center">
+                        <Run Text="Last sync: "/>
+                        <Run Text="{Binding LastSyncTime}"/>
+                    </TextBlock>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Connection status pill -->
+                    <Border Background="{StaticResource BgTertiary}" CornerRadius="12"
+                            Padding="10,5" Margin="0,0,12,0"
+                            BorderBrush="{Binding ConnectionColor}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{Binding ConnectionColor}"
+                                    VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding ConnectionStatus}" FontSize="11"
+                                      Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Battery -->
+                    <Border Background="{StaticResource BgTertiary}" CornerRadius="12"
+                            Padding="10,5" Margin="0,0,12,0"
+                            BorderBrush="{StaticResource Border}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding BatteryLevel}" FontSize="11"
+                                      Foreground="{Binding BatteryColor}" VerticalAlignment="Center"
+                                      Margin="0,0,4,0"/>
+                            <TextBlock Text="battery" FontSize="10"
+                                      Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="v1.0.0" FontSize="11" Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

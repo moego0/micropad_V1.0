@@ -30,6 +30,9 @@ public partial class StatsViewModel : ObservableObject
     [ObservableProperty]
     private bool _autoRefresh = true;
 
+    [ObservableProperty]
+    private int _totalKeypresses;
+
     public StatsViewModel(ProtocolHandler protocol)
     {
         _protocol = protocol;
@@ -82,8 +85,8 @@ public partial class StatsViewModel : ObservableObject
                 EncoderTurns.Add(0);
             }
 
-            var totalKeys = KeyPressCounts.Sum();
-            StatusText = $"Total key presses: {totalKeys} | Uptime: {FormatUptime(UptimeSeconds)}";
+            TotalKeypresses = KeyPressCounts.Sum();
+            StatusText = $"Total key presses: {TotalKeypresses} | Uptime: {FormatUptime(UptimeSeconds)}";
         }
         catch (Exception ex)
         {

@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
-#include "../config.h"
+#include "config.h"
 #include "profile.h"
 #include "profile_storage.h"
 

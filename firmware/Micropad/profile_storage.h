@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
-#include "../config.h"
+#include "config.h"
 #include "profile.h"
 
 class ProfileStorage {

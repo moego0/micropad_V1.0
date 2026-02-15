@@ -28,6 +28,8 @@ public partial class MacrosViewModel : ObservableObject
 
     public bool IsNotRecording => !IsRecording;
 
+    public int StepCount => Steps.Count;
+
     partial void OnIsRecordingChanged(bool value) => OnPropertyChanged(nameof(IsNotRecording));
 
     public MacrosViewModel(MacroRecorder recorder)
@@ -54,6 +56,7 @@ public partial class MacrosViewModel : ObservableObject
         {
             Steps.Add(s);
         }
+        OnPropertyChanged(nameof(StepCount));
         StatusText = $"Recorded {Steps.Count} step(s).";
     }
 
@@ -61,6 +64,7 @@ public partial class MacrosViewModel : ObservableObject
     private void AddDelay()
     {
         Steps.Add(new MacroStep { Action = "delay", DelayMs = 100 });
+        OnPropertyChanged(nameof(StepCount));
         StatusText = "Added delay step.";
     }
 
@@ -77,6 +81,7 @@ public partial class MacrosViewModel : ObservableObject
         if (step != null && Steps.Contains(step))
         {
             Steps.Remove(step);
+            OnPropertyChanged(nameof(StepCount));
         }
     }
 
@@ -84,6 +89,7 @@ public partial class MacrosViewModel : ObservableObject
     private void ClearSteps()
     {
         Steps.Clear();
+        OnPropertyChanged(nameof(StepCount));
         StatusText = "Steps cleared.";
     }
 

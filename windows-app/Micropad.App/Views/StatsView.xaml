@@ -2,82 +2,96 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="Stats"
-      Background="{StaticResource BackgroundPrimary}">
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <StackPanel Grid.Row="0" Margin="0,0,0,15">
-            <TextBlock Text="Statistics" FontSize="24" FontWeight="Bold" 
-                      Foreground="{StaticResource TextPrimary}"/>
-            <TextBlock Text="Key press and encoder usage from the device" 
-                      Foreground="{StaticResource TextSecondary}" Margin="0,5,0,0"/>
-        </StackPanel>
-
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,15">
-            <Button Content="Refresh" Command="{Binding RefreshCommand}"
-                    Background="{StaticResource AccentBlue}" Foreground="White"
-                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"/>
-            <CheckBox IsChecked="{Binding AutoRefresh}" Content="Auto-refresh every 5s" 
-                      Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
-        </StackPanel>
-
-        <Border Grid.Row="2" Background="{StaticResource BackgroundSecondary}"
-                BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
-                CornerRadius="8" Padding="20">
-            <StackPanel>
-                <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextPrimary}" 
-                          Margin="0,0,0,20" TextWrapping="Wrap"/>
-
-                <TextBlock Text="Key presses (K1–K12)" FontWeight="Bold" 
-                          Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
-                <ItemsControl ItemsSource="{Binding KeyPressCounts}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Background="{StaticResource BackgroundTertiary}" 
-                                    CornerRadius="4" Padding="12,8" Margin="4">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding}" FontWeight="Bold" 
-                                              Foreground="{StaticResource AccentBlue}" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Text="Encoder turns (ENC1, ENC2)" FontWeight="Bold" 
-                          Foreground="{StaticResource TextPrimary}" Margin="0,20,0,8"/>
-                <StackPanel Orientation="Horizontal">
-                    <Border Background="{StaticResource BackgroundTertiary}" 
-                            CornerRadius="4" Padding="16,10" Margin="0,0,10,0">
-                        <StackPanel>
-                            <TextBlock Text="ENC1" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
-                            <TextBlock Text="{Binding EncoderTurns[0], FallbackValue=0}" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BackgroundTertiary}" 
-                            CornerRadius="4" Padding="16,10">
-                        <StackPanel>
-                            <TextBlock Text="ENC2" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
-                            <TextBlock Text="{Binding EncoderTurns[1], FallbackValue=0}" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <TextBlock Margin="0,20,0,0" Foreground="{StaticResource TextSecondary}">
-                    <Run Text="Uptime: "/>
-                    <Run Text="{Binding UptimeSeconds}"/>
-                    <Run Text=" seconds"/>
-                </TextBlock>
+      Background="{StaticResource BgPrimary}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24">
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Statistics &amp; Analytics" FontSize="24" FontWeight="SemiBold"
+                          Foreground="{StaticResource TextPrimary}"/>
+                <TextBlock Text="Key press and encoder usage from the device"
+                          Foreground="{StaticResource TextSecondary}" Margin="0,6,0,0" FontSize="13"/>
             </StackPanel>
-        </Border>
-    </Grid>
+
+            <!-- Quick stats row -->
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="{StaticResource BgSecondary}"
+                        BorderBrush="{StaticResource Border}" BorderThickness="1"
+                        CornerRadius="12" Padding="20">
+                    <StackPanel>
+                        <TextBlock Text="Total key presses" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,6"/>
+                        <TextBlock Text="{Binding TotalKeypresses}" FontSize="28" FontWeight="SemiBold"
+                                  Foreground="{StaticResource AccentPrimary}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Background="{StaticResource BgSecondary}"
+                        BorderBrush="{StaticResource Border}" BorderThickness="1"
+                        CornerRadius="12" Padding="20">
+                    <StackPanel>
+                        <TextBlock Text="Uptime" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,6"/>
+                        <TextBlock Text="{Binding UptimeSeconds}" FontSize="28" FontWeight="SemiBold"
+                                  Foreground="{StaticResource Success}" HorizontalAlignment="Left"/>
+                        <TextBlock Text="seconds" FontSize="11" Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="4" Background="{StaticResource BgSecondary}"
+                        BorderBrush="{StaticResource Border}" BorderThickness="1"
+                        CornerRadius="12" Padding="20">
+                    <StackPanel>
+                        <TextBlock Text="Encoders" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,6"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="ENC1: " FontSize="14" Foreground="{StaticResource TextTertiary}"/>
+                            <TextBlock Text="{Binding EncoderTurns[0], FallbackValue=0}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource AccentPrimary}" Margin="0,0,16,0"/>
+                            <TextBlock Text="ENC2: " FontSize="14" Foreground="{StaticResource TextTertiary}"/>
+                            <TextBlock Text="{Binding EncoderTurns[1], FallbackValue=0}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource AccentPrimary}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Toolbar -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                <Button Content="Refresh" Command="{Binding RefreshCommand}"
+                        Background="{StaticResource AccentPrimary}" Foreground="White"
+                        Padding="14,8" Margin="0,0,10,0" BorderThickness="0" Cursor="Hand"/>
+                <CheckBox IsChecked="{Binding AutoRefresh}" Content="Auto-refresh every 5s"
+                          Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Key presses (K1–K12) card -->
+            <Border Background="{StaticResource BgSecondary}"
+                    BorderBrush="{StaticResource Border}" BorderThickness="1"
+                    CornerRadius="12" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Key usage (K1–K12)" FontSize="16" FontWeight="SemiBold"
+                              Foreground="{StaticResource TextPrimary}" Margin="0,0,0,12"/>
+                    <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondary}"
+                              Margin="0,0,0,12" TextWrapping="Wrap" FontSize="12"/>
+                    <ItemsControl ItemsSource="{Binding KeyPressCounts}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource BgTertiary}"
+                                        CornerRadius="8" Padding="14,10" Margin="4">
+                                    <TextBlock Text="{Binding}" FontWeight="SemiBold"
+                                              Foreground="{StaticResource AccentPrimary}" HorizontalAlignment="Center"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </Page>

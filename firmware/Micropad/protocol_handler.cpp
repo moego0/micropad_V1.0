@@ -1,6 +1,6 @@
-#include "comms/protocol_handler.h"
-#include "comms/ble_config.h"
-#include "profiles/profile_manager.h"
+#include "protocol_handler.h"
+#include "ble_config.h"
+#include "profile_manager.h"
 
 ProtocolHandler::ProtocolHandler() {
     _profileManager = nullptr;

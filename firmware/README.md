@@ -1,230 +1,88 @@
 # Micropad Firmware
 
-## Quick Start
+ESP32 firmware for the Micropad wireless macropad. Supports 12 keys, 2 encoders, BLE HID, profiles on LittleFS, and BLE GATT config for the Windows app.
 
-### 1. Install PlatformIO
+---
 
-If you haven't already:
-- Install [VS Code](https://code.visualstudio.com/)
-- Install the [PlatformIO extension](https://platformio.org/install/ide?install=vscode)
+## Quick Start (5 minutes)
 
-### 2. Open Project
+### 1. Arduino IDE
+- Install [Arduino IDE 2.x](https://www.arduino.cc/en/software).
+- **File → Preferences** → Additional Board Manager URLs, add:
+  ```
+  https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  ```
+- **Tools → Board → Boards Manager** → install **ESP32 by Espressif Systems** (v2.0.14+).
 
-1. Open VS Code
-2. File → Open Folder
-3. Select the `firmware` folder
+### 2. Libraries
+- **Sketch → Include Library → Manage Libraries**: install **NimBLE-Arduino**, **ArduinoJson**.
+- **Add .ZIP Library**: add [ESPAsyncWebServer master](https://github.com/me-no-dev/ESPAsyncWebServer/archive/master.zip) and [AsyncTCP master](https://github.com/me-no-dev/AsyncTCP/archive/master.zip).
 
-### 3. Flash to ESP32
+### 3. Open & upload
+- Open `firmware/Micropad/Micropad.ino`.
+- **Tools → Board**: ESP32 Dev Module.
+- **Tools → Partition Scheme**: Huge APP (3MB No OTA/1MB SPIFFS).
+- **Tools → Port**: your COM port.
+- Connect ESP32 via USB → click **Upload**.
 
-1. Connect your Wemos D1 Mini ESP32 via USB
-2. Click the PlatformIO icon in the sidebar (alien head)
-3. Click "Upload" (or press Ctrl+Alt+U)
-4. Wait for compilation and upload to complete
+### 4. Pair (Windows)
+- **Settings → Bluetooth & devices → Add device → Bluetooth** → select **Micropad**.
 
-### 4. Monitor Serial Output
+---
 
-1. Click "Monitor" in PlatformIO sidebar (or press Ctrl+Alt+S)
-2. You should see debug output showing:
-   - Initialization messages
-   - Key presses
-   - Encoder turns
-   - BLE connection status
+## Hardware
 
-## Hardware Connections
+### Pinout
+- **Matrix rows:** GPIO 16, 17, 18  
+- **Matrix cols:** GPIO 21, 22, 23, 19  
+- **Encoder 1:** A=32, B=33, SW=27  
+- **Encoder 2:** A=25, B=26, SW=13  
 
-### Key Matrix
-- **Rows**: GPIO 16, 17, 18
-- **Columns**: GPIO 21, 22, 23, 19
+Diodes: cathode (stripe) toward key, anode to column.
 
-### Encoders
-- **Encoder 1** (Top-left): A=32, B=33, SW=27
-- **Encoder 2** (Top-right): A=25, B=26, SW=13
-
-## Built-in Profiles
-
-The firmware includes 4 pre-configured profiles stored in LittleFS:
-
-### Profile 0: General (Default)
-**Keys:**
-- K1: Ctrl+C (Copy)
-- K2: Ctrl+V (Paste)
-- K3: Ctrl+Z (Undo)
-- K4: Ctrl+Y (Redo)
-- K5: Alt+Tab (Switch Window)
-- K6: Win+D (Show Desktop)
-- K7: Win+Shift+S (Screenshot)
-- K8: Win+E (Explorer)
-- K9: Previous Track
-- K10: Play/Pause
-- K11: Next Track
-- K12: (Switch to Profile 1 via combo)
-
-**Encoder 1:** Volume Up/Down, Press=Mute  
-**Encoder 2:** Scroll Up/Down, Press=Play/Pause
-
-### Profile 1: Media
-Dedicated media control profile with volume, playback controls, and profile switching back to General.
-
-### Profile 2: VS Code
-Optimized for coding with shortcuts like Save, Find, Command Palette, Debug, Terminal, Comment, Format, etc.
-
-### Profile 3: Creative (Photoshop/etc)
-Tools for creative apps: Undo/Redo, Brush controls, Layer management, Transform, Selection tools, etc.
-
-## Profile Switching
-
-**Two-Key Combos:**
-- Hold K1 + K4 for 800ms → Switch to Profile 1 (Media)
-- Hold K1 + K12 for 800ms → Switch to Profile 0 (General)
-
-**In-Profile Switching:**
-- Many profiles have K12 mapped to switch back to General profile
-
-**Persistent:**
-- Last active profile is saved and restored on reboot
-
-## Testing Steps
-
-### 1. Test Serial Output
+### PlatformIO (optional)
 ```bash
-# Open monitor and press keys
+cd firmware
+pio run -t upload
 pio device monitor -b 115200
 ```
 
-You should see:
-```
-========================================
-Micropad Firmware 1.0.0
-========================================
-Initializing input hardware...
-Matrix initialized
-Encoder initialized on pins A=32, B=33, SW=27
-Encoder initialized on pins A=25, B=26, SW=13
-Loading default profile...
-Profile loaded: General
-Starting BLE HID...
-BLE HID started, waiting for connection...
-========================================
-Micropad ready! Waiting for BLE connection...
-========================================
-```
+---
 
-### 2. Test Matrix Scanning
+## Profiles
 
-Press each key and verify you see:
-```
-Key 0 pressed
-Key 0 released
-```
+- **8 profile slots** on LittleFS; 4 built-in: General, Media, VS Code, Creative.
+- **Switch profiles:** Hold K1+K4 (≈800 ms) → Media; Hold K1+K12 (≈800 ms) → General.
+- Last active profile is saved and restored on reboot.
 
-### 3. Test Encoders
+---
 
-Rotate encoders and press them:
-```
-Encoder 1 turned: 1
-Encoder 1 pressed
-```
+## BLE connection troubleshooting
 
-### 4. Test BLE Connection
+- **Connects then disconnects / driver error:** Update Bluetooth driver (Device Manager → Bluetooth → adapter → Update driver). Remove Micropad from Bluetooth & devices, restart PC, power-cycle Micropad, then pair again. Disable power saving for the Bluetooth adapter (Device Manager → adapter → Power Management → uncheck “turn off to save power”).
+- **Only one host:** BLE HID allows one host. If another device (e.g. phone) is paired, forget Micropad on that device, power-cycle Micropad, then pair on PC.
+- **USB flashing:** Use CH340/CP2102 USB‑serial driver if the board is not detected.
 
-**On Windows:**
-1. Go to Settings → Bluetooth & devices
-2. Click "Add device"
-3. Look for "Micropad"
-4. Click to pair
+---
 
-**On Your PC:**
-Once connected, test the keys:
-- Press K1 (should copy)
-- Press K2 (should paste)
-- Rotate encoder 1 (should change volume)
+## Testing
 
-## Troubleshooting
+1. **Serial monitor** (115200): reset ESP32; you should see “Micropad Firmware 1.0.0” and “Micropad ready!”. Press keys → “Key X pressed”.
+2. **Encoders:** Rotate and press; check “Encoder N turned/pressed” in serial.
+3. **BLE:** Pair on Windows, open Notepad; K1 = Copy, K2 = Paste, Encoder 1 = volume.
 
-### ESP32 Won't Boot
-If the ESP32 fails to boot:
-- Check that no GPIO 0, 2, 12, or 15 are being used
-- Verify all connections are correct
-- Try holding BOOT button while powering on
+---
 
-### Keys Not Working
-1. Check serial output to verify keys are being detected
-2. Verify diode orientation (COL2K - cathode to key)
-3. Check for cold solder joints
+## Config (optional)
 
-### Encoders Not Responding
-1. Verify pin connections
-2. Check that encoders have pullups enabled
-3. Try swapping A and B pins if direction is reversed
+- **config.h:** `BLE_DEVICE_NAME`, `DEBOUNCE_MS`, `DEBUG_ENABLED`.
 
-### BLE Not Connecting
-1. Make sure another BLE device isn't already connected
-2. Restart the ESP32
-3. Clear Bluetooth cache on PC and try pairing again
-4. Check that NimBLE library is properly installed
+---
 
-### Compilation Errors
+## GATT (for Windows app)
 
-If you get library errors:
-```bash
-# Clean and rebuild
-pio run -t clean
-pio run
-```
+- Service: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`  
+- CMD (write): `...914c`  
+- EVT (notify): `...914d`  
 
-## Advanced Configuration
-
-### Change BLE Name
-Edit `src/config.h`:
-```cpp
-#define BLE_DEVICE_NAME "MyCustomName"
-```
-
-### Adjust Debounce Time
-Edit `src/config.h`:
-```cpp
-#define DEBOUNCE_MS 5  // Increase if keys are bouncing
-```
-
-### Enable/Disable Debug Output
-Edit `src/config.h`:
-```cpp
-#define DEBUG_ENABLED true  // Set to false to disable
-```
-
-## Phase 2 Features (Implemented)
-
-✅ **Profile Storage**: Profiles saved to LittleFS flash storage  
-✅ **Profile Manager**: Load, save, switch between 8 profiles  
-✅ **JSON Serialization**: Profiles stored as human-readable JSON  
-✅ **Persistent Settings**: Last active profile saved via NVS Preferences  
-✅ **Key Combos**: Two-key combinations for quick profile switching  
-✅ **4 Built-in Templates**: General, Media, VS Code, Creative  
-✅ **Factory Reset**: Restore all default profiles
-
-## Storage Information
-
-The firmware uses ESP32's LittleFS filesystem for profile storage:
-- **Location**: Flash partition (separate from program)
-- **Format**: JSON files in `/profiles/` directory
-- **Naming**: `profile_0.json` through `profile_7.json`
-- **Atomic Writes**: Safe profile updates (writes to .tmp then renames)
-- **Capacity**: Up to 8 profiles (expandable)
-
-## Next Steps
-
-**Phase 2 Complete!** ✅
-
-Now move to:
-1. **Phase 3**: BLE GATT config service for app communication
-2. **Phase 3**: WebSocket server for WiFi configuration
-3. **Phase 4**: Build Windows WPF application
-4. **Phase 5**: Profile editor UI and sync
-
-## Support
-
-Check the main project README for:
-- Full feature documentation
-- Windows app development
-- Profile customization
-- Advanced features (macros, layers, etc.)
+Commands: `getDeviceInfo`, `listProfiles`, `getProfile`, `setProfile`, `setActiveProfile`, `getStats`, `factoryReset`, `reboot`.

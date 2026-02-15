@@ -1,4 +1,4 @@
-#include "comms/wifi_manager.h"
+#include "wifi_manager.h"
 
 WiFiManager::WiFiManager() {
     _apMode = false;

@@ -1,4 +1,4 @@
-#include "profiles/profile_manager.h"
+#include "profile_manager.h"
 #include "default_profile.h"
 #include "profile_templates.h"
 
@@ -169,56 +169,67 @@ void ProfileManager::factoryReset() {
 void ProfileManager::initializeDefaultProfiles() {
     DEBUG_PRINTLN("Creating default profiles...");
     
-    // Use a single Profile on stack to avoid stack overflow (Profile is large)
-    Profile p;
-    EncoderConfig generalEncoders[2];
-    
     // Profile 0: General
-    p = createDefaultProfile();
-    p.id = 0;
-    generalEncoders[0] = p.encoders[0];
-    generalEncoders[1] = p.encoders[1];
-    _storage.saveProfile(p);
+    Profile generalProfile = createDefaultProfile();
+    generalProfile.id = 0;
+    _storage.saveProfile(generalProfile);
     DEBUG_PRINTLN("  - Profile 0: General");
     
     // Profile 1: Media
-    p.id = 1;
-    strcpy(p.name, "Media");
-    p.version = 1;
+    Profile mediaProfile;
+    mediaProfile.id = 1;
+    strcpy(mediaProfile.name, "Media");
+    mediaProfile.version = 1;
+    
+    // All keys are media controls
     for (uint8_t i = 0; i < MATRIX_KEYS; i++) {
-        p.keys[i].action.type = ACTION_NONE;
+        mediaProfile.keys[i].action.type = ACTION_NONE;
     }
-    p.keys[0].action.type = ACTION_MEDIA;
-    p.keys[0].action.config.media.function = MEDIA_FUNC_PREV;
-    p.keys[1].action.type = ACTION_MEDIA;
-    p.keys[1].action.config.media.function = MEDIA_FUNC_PLAY_PAUSE;
-    p.keys[2].action.type = ACTION_MEDIA;
-    p.keys[2].action.config.media.function = MEDIA_FUNC_NEXT;
-    p.keys[3].action.type = ACTION_MEDIA;
-    p.keys[3].action.config.media.function = MEDIA_FUNC_STOP;
-    p.keys[4].action.type = ACTION_MEDIA;
-    p.keys[4].action.config.media.function = MEDIA_FUNC_VOLUME_DOWN;
-    p.keys[5].action.type = ACTION_MEDIA;
-    p.keys[5].action.config.media.function = MEDIA_FUNC_MUTE;
-    p.keys[6].action.type = ACTION_MEDIA;
-    p.keys[6].action.config.media.function = MEDIA_FUNC_VOLUME_UP;
-    p.keys[11].action.type = ACTION_PROFILE;
-    p.keys[11].action.config.profile.profileId = 0;
-    p.encoders[0] = generalEncoders[0];
-    p.encoders[1] = generalEncoders[1];
-    _storage.saveProfile(p);
+    
+    // K1-K4: Media controls
+    mediaProfile.keys[0].action.type = ACTION_MEDIA;
+    mediaProfile.keys[0].action.config.media.function = MEDIA_FUNC_PREV;
+    
+    mediaProfile.keys[1].action.type = ACTION_MEDIA;
+    mediaProfile.keys[1].action.config.media.function = MEDIA_FUNC_PLAY_PAUSE;
+    
+    mediaProfile.keys[2].action.type = ACTION_MEDIA;
+    mediaProfile.keys[2].action.config.media.function = MEDIA_FUNC_NEXT;
+    
+    mediaProfile.keys[3].action.type = ACTION_MEDIA;
+    mediaProfile.keys[3].action.config.media.function = MEDIA_FUNC_STOP;
+    
+    // K5-K7: Volume controls
+    mediaProfile.keys[4].action.type = ACTION_MEDIA;
+    mediaProfile.keys[4].action.config.media.function = MEDIA_FUNC_VOLUME_DOWN;
+    
+    mediaProfile.keys[5].action.type = ACTION_MEDIA;
+    mediaProfile.keys[5].action.config.media.function = MEDIA_FUNC_MUTE;
+    
+    mediaProfile.keys[6].action.type = ACTION_MEDIA;
+    mediaProfile.keys[6].action.config.media.function = MEDIA_FUNC_VOLUME_UP;
+    
+    // K12: Switch back to General profile
+    mediaProfile.keys[11].action.type = ACTION_PROFILE;
+    mediaProfile.keys[11].action.config.profile.profileId = 0;
+    
+    // Encoders same as general
+    mediaProfile.encoders[0] = generalProfile.encoders[0];
+    mediaProfile.encoders[1] = generalProfile.encoders[1];
+    
+    _storage.saveProfile(mediaProfile);
     DEBUG_PRINTLN("  - Profile 1: Media");
     
     // Profile 2: VS Code
-    p = createVSCodeProfile();
-    p.id = 2;
-    _storage.saveProfile(p);
+    Profile vscodeProfile = createVSCodeProfile();
+    vscodeProfile.id = 2;
+    _storage.saveProfile(vscodeProfile);
     DEBUG_PRINTLN("  - Profile 2: VS Code");
     
-    // Profile 3: Creative
-    p = createCreativeProfile();
-    p.id = 3;
-    _storage.saveProfile(p);
+    // Profile 3: Creative (Photoshop/etc)
+    Profile creativeProfile = createCreativeProfile();
+    creativeProfile.id = 3;
+    _storage.saveProfile(creativeProfile);
     DEBUG_PRINTLN("  - Profile 3: Creative");
     
     DEBUG_PRINTF("Created %d default profiles\n", _storage.getProfileCount());

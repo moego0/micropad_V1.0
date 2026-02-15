@@ -1,12 +1,3 @@
-# PlatformIO
-.pio/
-.vscode/
-.pioenvs/
-.piolibdeps/
-lib/
-.clang_complete
-.gcc-flags.json
-
 # Build artifacts
 *.o
 *.a

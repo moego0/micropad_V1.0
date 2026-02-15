@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include "../config.h"
+#include "config.h"
 
 // Forward declarations
 class ProfileManager;

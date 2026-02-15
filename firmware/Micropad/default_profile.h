@@ -1,8 +1,8 @@
 #ifndef DEFAULT_PROFILE_H
 #define DEFAULT_PROFILE_H
 
-#include "profiles/profile.h"
-#include "comms/ble_hid.h"
+#include "profile.h"
+#include "ble_hid.h"
 
 // Create default profile (General use)
 inline Profile createDefaultProfile() {
@@ -64,10 +64,12 @@ inline Profile createDefaultProfile() {
     profile.keys[10].action.type = ACTION_MEDIA;
     profile.keys[10].action.config.media.function = MEDIA_FUNC_NEXT;
     
-    // Key 11: Unassigned for now
-    profile.keys[11].action.type = ACTION_NONE;
+    // Key 11: Open YouTube (types URL + Enter in address bar)
+    profile.keys[11].action.type = ACTION_TEXT;
+    strncpy(profile.keys[11].action.config.text.text, "https://www.youtube.com\n", sizeof(profile.keys[11].action.config.text.text) - 1);
+    profile.keys[11].action.config.text.text[sizeof(profile.keys[11].action.config.text.text) - 1] = '\0';
     
-    // Encoder 1 (Top-left): Volume Control
+    // Encoder 1 (Top-left): Volume control – turn for volume, press for mute
     profile.encoders[0].cwAction.type = ACTION_MEDIA;
     profile.encoders[0].cwAction.config.media.function = MEDIA_FUNC_VOLUME_UP;
     

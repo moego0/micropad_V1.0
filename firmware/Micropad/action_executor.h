@@ -2,9 +2,9 @@
 #define ACTION_EXECUTOR_H
 
 #include <Arduino.h>
-#include "../config.h"
-#include "../profiles/profile.h"
-#include "../comms/ble_hid.h"
+#include "config.h"
+#include "profile.h"
+#include "ble_hid.h"
 
 class ActionExecutor {
 public:

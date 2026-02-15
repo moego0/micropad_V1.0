@@ -1,4 +1,4 @@
-#include "input/encoder.h"
+#include "encoder.h"
 
 RotaryEncoder::RotaryEncoder() {
     _position = 0;
