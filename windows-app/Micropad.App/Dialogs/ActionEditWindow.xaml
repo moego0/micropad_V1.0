@@ -1,0 +1,100 @@
+<Window x:Class="Micropad.App.Dialogs.ActionEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Assign Action" Height="380" Width="400"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundPrimary}"
+        ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Key Action" FontSize="18" FontWeight="Bold"
+                   Foreground="{StaticResource TextPrimary}" Margin="0,0,0,15"/>
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,15">
+            <TextBlock Text="Type" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+            <ComboBox x:Name="TypeCombo" Height="28" SelectedValuePath="Tag"
+                      Background="{StaticResource BackgroundSecondary}"
+                      Foreground="{StaticResource TextPrimary}">
+                <ComboBoxItem Content="Not Assigned" Tag="None"/>
+                <ComboBoxItem Content="Hotkey" Tag="Hotkey"/>
+                <ComboBoxItem Content="Text" Tag="Text"/>
+                <ComboBoxItem Content="Media Key" Tag="Media"/>
+                <ComboBoxItem Content="Mouse" Tag="Mouse"/>
+                <ComboBoxItem Content="Switch Profile" Tag="Profile"/>
+                <ComboBoxItem Content="Launch App" Tag="App"/>
+                <ComboBoxItem Content="Open URL" Tag="Url"/>
+            </ComboBox>
+        </StackPanel>
+
+        <Border x:Name="ConfigPanel" Grid.Row="2" Margin="0,0,0,15"
+                Background="{StaticResource BackgroundSecondary}"
+                BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
+                CornerRadius="6" Padding="12">
+            <StackPanel>
+                <!-- Hotkey -->
+                <StackPanel x:Name="HotkeyPanel" Visibility="Collapsed">
+                    <CheckBox x:Name="ModCtrl" Content="Ctrl" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <CheckBox x:Name="ModShift" Content="Shift" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <CheckBox x:Name="ModAlt" Content="Alt" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,5"/>
+                    <CheckBox x:Name="ModWin" Content="Win" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,10"/>
+                    <TextBlock Text="Key" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="KeyCombo" Height="26" Background="{StaticResource BackgroundTertiary}"
+                              Foreground="{StaticResource TextPrimary}"/>
+                </StackPanel>
+                <!-- Text -->
+                <StackPanel x:Name="TextPanel" Visibility="Collapsed">
+                    <TextBlock Text="Text to type" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="TextInputBox" Height="80" TextWrapping="Wrap" AcceptsReturn="True"
+                             Background="{StaticResource BackgroundTertiary}"
+                             Foreground="{StaticResource TextPrimary}" Padding="8"/>
+                </StackPanel>
+                <!-- Media -->
+                <StackPanel x:Name="MediaPanel" Visibility="Collapsed">
+                    <TextBlock Text="Media function" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="MediaCombo" Height="26" Background="{StaticResource BackgroundTertiary}"
+                              Foreground="{StaticResource TextPrimary}"/>
+                </StackPanel>
+                <!-- Mouse -->
+                <StackPanel x:Name="MousePanel" Visibility="Collapsed">
+                    <TextBlock Text="Mouse action" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="MouseCombo" Height="26" Background="{StaticResource BackgroundTertiary}"
+                              Foreground="{StaticResource TextPrimary}"/>
+                </StackPanel>
+                <!-- Profile -->
+                <StackPanel x:Name="ProfilePanel" Visibility="Collapsed">
+                    <TextBlock Text="Profile ID (0-7)" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="ProfileIdInput" Height="24" Background="{StaticResource BackgroundTertiary}"
+                             Foreground="{StaticResource TextPrimary}" Padding="4"/>
+                </StackPanel>
+                <!-- App -->
+                <StackPanel x:Name="AppPanel" Visibility="Collapsed">
+                    <TextBlock Text="Application path" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="AppPathInput" Height="24" Background="{StaticResource BackgroundTertiary}"
+                             Foreground="{StaticResource TextPrimary}" Padding="4"/>
+                </StackPanel>
+                <!-- URL -->
+                <StackPanel x:Name="UrlPanel" Visibility="Collapsed">
+                    <TextBlock Text="URL" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <TextBox x:Name="UrlInput" Height="24" Background="{StaticResource BackgroundTertiary}"
+                             Foreground="{StaticResource TextPrimary}" Padding="4"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Width="80" Height="32" Margin="0,0,10,0"
+                    Background="{StaticResource BackgroundTertiary}"
+                    Foreground="{StaticResource TextPrimary}" BorderThickness="0"
+                    Click="Cancel_Click"/>
+            <Button Content="Save" Width="80" Height="32"
+                    Background="{StaticResource AccentBlue}" Foreground="White"
+                    BorderThickness="0" Click="Save_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,75 @@
+<Page x:Class="Micropad.App.Views.MacrosView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Macros"
+      Background="{StaticResource BackgroundPrimary}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock Text="Macros" FontSize="24" FontWeight="Bold" 
+                      Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock Text="Record or build macro steps, then assign to a key in Profiles." 
+                      Foreground="{StaticResource TextSecondary}" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,15">
+            <Button Content="Start Recording" Command="{Binding StartRecordingCommand}"
+                    Background="{StaticResource Error}" Foreground="White"
+                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"
+                    IsEnabled="{Binding IsNotRecording}"/>
+            <Button Content="Stop Recording" Command="{Binding StopRecordingCommand}"
+                    Background="{StaticResource Success}" Foreground="White"
+                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"
+                    IsEnabled="{Binding IsRecording}"/>
+            <Button Content="Add Delay (100ms)" Command="{Binding AddDelayCommand}"
+                    Background="{StaticResource BackgroundTertiary}"
+                    Foreground="{StaticResource TextPrimary}"
+                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"/>
+            <Button Content="Clear" Command="{Binding ClearStepsCommand}"
+                    Background="{StaticResource BackgroundTertiary}"
+                    Foreground="{StaticResource TextPrimary}"
+                    Padding="12,6" BorderThickness="0" Cursor="Hand"/>
+        </StackPanel>
+
+        <Border Grid.Row="2" Background="{StaticResource BackgroundSecondary}"
+                BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
+                CornerRadius="8" Padding="15" Margin="0,0,0,15">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="Steps" FontWeight="Bold" 
+                          Foreground="{StaticResource TextPrimary}" Margin="0,0,0,10"/>
+                <ListBox Grid.Row="1" ItemsSource="{Binding Steps}" 
+                         Background="Transparent" BorderThickness="0"
+                         Foreground="{StaticResource TextPrimary}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding DisplayText}" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Content="Remove" Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                        CommandParameter="{Binding}"
+                                        Background="Transparent" Foreground="{StaticResource Error}"
+                                        Padding="8,2" BorderThickness="0" Cursor="Hand"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="3" Text="{Binding StatusText}" 
+                  Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+    </Grid>
+</Page>

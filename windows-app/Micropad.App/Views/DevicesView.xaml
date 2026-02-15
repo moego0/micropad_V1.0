@@ -1,0 +1,111 @@
+<Page x:Class="Micropad.App.Views.DevicesView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Devices"
+      Background="{StaticResource BackgroundPrimary}">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Bluetooth Devices" FontSize="24" FontWeight="Bold" 
+                      Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock Text="Scan for and connect to your Micropad" 
+                      Foreground="{StaticResource TextSecondary}" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <!-- Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Device List -->
+            <Border Grid.Column="0" Margin="0,0,10,0" 
+                    Background="{StaticResource BackgroundSecondary}"
+                    BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
+                    CornerRadius="8" Padding="15">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Scan Button -->
+                    <Button Grid.Row="0" Content="Scan for Devices" 
+                           Command="{Binding StartScanCommand}"
+                           Background="{StaticResource AccentBlue}"
+                           Foreground="White" Padding="15,8"
+                           HorizontalAlignment="Left" Margin="0,0,0,10"
+                           BorderThickness="0" Cursor="Hand"/>
+
+                    <!-- Devices ListBox -->
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Devices}" 
+                            SelectedItem="{Binding SelectedDevice}"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="{StaticResource TextPrimary}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="📱" FontSize="16" Margin="0,0,10,0"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Id}" FontSize="10" 
+                                                  Foreground="{StaticResource TextSecondary}"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="✓ Paired" 
+                                              Foreground="#28A745"
+                                              Visibility="{Binding IsPaired, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- Device Info -->
+            <Border Grid.Column="1" Background="{StaticResource BackgroundSecondary}"
+                    BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
+                    CornerRadius="8" Padding="15">
+                <StackPanel>
+                    <TextBlock Text="Device Information" FontSize="16" FontWeight="Bold" 
+                              Foreground="{StaticResource TextPrimary}" Margin="0,0,0,15"/>
+                    
+                    <TextBlock Text="{Binding DeviceInfo}" TextWrapping="Wrap" LineHeight="20"
+                              Foreground="{StaticResource TextSecondary}"/>
+
+                    <StackPanel Margin="0,20,0,0">
+                        <Button Content="Connect" 
+                               Command="{Binding ConnectCommand}"
+                               Background="#28A745" Foreground="White"
+                               Padding="15,8" BorderThickness="0"
+                               Cursor="Hand" Margin="0,0,0,10"/>
+                        
+                        <Button Content="Disconnect" 
+                               Command="{Binding DisconnectCommand}"
+                               Background="#DC3545" Foreground="White"
+                               Padding="15,8" BorderThickness="0"
+                               Cursor="Hand"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Status -->
+        <TextBlock Grid.Row="2" Text="Scanning for devices..." Margin="0,10,0,0"
+                  Foreground="{StaticResource AccentBlue}" FontStyle="Italic"
+                  Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibilityConverter}}"/>
+    </Grid>
+</Page>

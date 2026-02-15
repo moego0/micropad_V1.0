@@ -1,0 +1,22 @@
+# Windows / IDE
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build / binaries
+bin/
+obj/
+.vs/
+*.dll
+*.pdb
+*.exe
+
+# NuGet
+packages/
+*.nupkg
+
+# Logs
+*.log
