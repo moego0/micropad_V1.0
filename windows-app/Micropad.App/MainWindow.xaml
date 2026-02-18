@@ -4,7 +4,8 @@
         Title="Micropad" Height="640" Width="960"
         MinHeight="500" MinWidth="800"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource BgPrimary}">
+        Background="{StaticResource BgPrimary}"
+        Icon="pack://application:,,,/Micropad.App;component/Assets/logo_darkmode.png">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -15,24 +16,35 @@
         <!-- Main Content -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="240"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Navigation Sidebar -->
-            <Border Grid.Column="0" Background="{StaticResource BgSecondary}"
-                    BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+            <!-- Navigation Sidebar (richer: logo, brand accent, subtle gradient) -->
+            <Border Grid.Column="0" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#252526" Offset="0"/>
+                        <GradientStop Color="#2A2A2C" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="MICROPAD" FontSize="18" FontWeight="SemiBold"
-                              Foreground="{StaticResource TextPrimary}"
-                              Margin="20,24,20,28"/>
+                    <!-- SENetLabs branding logo -->
+                    <Border Grid.Row="0" Margin="16,20,16,8" Padding="8,6"
+                            Background="{StaticResource BgTertiary}" CornerRadius="8">
+                        <Image Source="pack://application:,,,/Micropad.App;component/Assets/opning_logo-dark.png"
+                               Stretch="Uniform" Height="36" HorizontalAlignment="Left"/>
+                    </Border>
+                    <TextBlock Grid.Row="1" Text="MICROPAD" FontSize="11" FontWeight="SemiBold"
+                              Foreground="{StaticResource TextTertiary}" Margin="20,0,20,16"/>
 
-                    <ListBox x:Name="NavigationList" Grid.Row="1" Background="Transparent" BorderThickness="0"
+                    <ListBox x:Name="NavigationList" Grid.Row="2" Background="Transparent" BorderThickness="0"
                              SelectionChanged="NavigationList_SelectionChanged"
                              Padding="8,0,8,12">
                         <ListBox.ItemContainerStyle>
@@ -46,8 +58,8 @@
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{StaticResource AccentPrimary}"
+                                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{StaticResource BrandBlue}"
                                                     BorderThickness="3,0,0,0" Padding="{TemplateBinding Padding}">
                                                 <ContentPresenter/>
                                             </Border>
@@ -57,6 +69,7 @@
                                                 </Trigger>
                                                 <Trigger Property="IsSelected" Value="True">
                                                     <Setter TargetName="Bd" Property="Background" Value="{StaticResource BgTertiary}"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrandBlue}"/>
                                                     <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
                                                     <Setter Property="FontWeight" Value="SemiBold"/>
                                                 </Trigger>
@@ -80,7 +93,7 @@
                    Background="{StaticResource BgPrimary}"/>
         </Grid>
 
-        <!-- Status Bar (Connection indicator, battery, last sync) -->
+        <!-- Status Bar (richer: smiley logo, connection, battery) -->
         <Border Grid.Row="1" Background="{StaticResource BgSecondary}"
                 BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid>
@@ -100,6 +113,10 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- SENetLabs smiley logo -->
+                    <Image Source="pack://application:,,,/Micropad.App;component/Assets/logo_darkmode.png"
+                           Width="24" Height="24" Margin="0,0,14,0" VerticalAlignment="Center"
+                           Opacity="0.9"/>
                     <!-- Connection status pill -->
                     <Border Background="{StaticResource BgTertiary}" CornerRadius="12"
                             Padding="10,5" Margin="0,0,12,0"

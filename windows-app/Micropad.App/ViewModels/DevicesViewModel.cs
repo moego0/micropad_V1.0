@@ -53,12 +53,50 @@ public partial class DevicesViewModel : ObservableObject
         {
             App.Current.Dispatcher.Invoke(() => IsConnected = false);
         };
+        _connection.Connected += (_, _) =>
+        {
+            App.Current.Dispatcher.Invoke(() => IsConnected = true);
+        };
+        // Reflect actual connection state (e.g. already connected from startup auto-connect)
+        IsConnected = _connection.IsConnected;
+        _ = LoadPairedDevicesAsync();
+    }
+
+    /// <summary>Load already-paired BLE devices so Micropad appears even when connected to PC (not advertising).</summary>
+    private async Task LoadPairedDevicesAsync()
+    {
+        try
+        {
+            var selector = BluetoothLEDevice.GetDeviceSelector();
+            var paired = await DeviceInformation.FindAllAsync(selector);
+            App.Current.Dispatcher.Invoke(() =>
+            {
+                foreach (var info in paired)
+                {
+                    var name = info.Name ?? string.Empty;
+                    if (!name.Contains("Micropad", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (Devices.Any(d => d.DeviceId == info.Id)) continue;
+                    Devices.Add(new BleDiscoveredDevice
+                    {
+                        Name = string.IsNullOrEmpty(name) ? "Micropad" : name,
+                        DeviceId = info.Id,
+                        BluetoothAddress = 0,
+                        Rssi = 0
+                    });
+                }
+            });
+        }
+        catch
+        {
+            // Ignore (e.g. no Bluetooth, permission)
+        }
     }
 
     [RelayCommand]
     private async Task StartScanAsync()
     {
         Devices.Clear();
+        await LoadPairedDevicesAsync();
         IsScanning = true;
         StatusText = "Scanning for Micropad (devices with Config service)...";
 
@@ -90,20 +128,26 @@ public partial class DevicesViewModel : ObservableObject
     private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
     {
         var name = args.Advertisement.LocalName ?? "(Micropad)";
-        var existing = Devices.FirstOrDefault(d => d.BluetoothAddress == args.BluetoothAddress);
-        if (existing != null)
+        App.Current.Dispatcher.Invoke(() =>
         {
-            App.Current.Dispatcher.Invoke(() =>
+            var existing = Devices.FirstOrDefault(d => d.BluetoothAddress == args.BluetoothAddress);
+            if (existing != null)
             {
                 existing.Name = name;
                 existing.Rssi = args.RawSignalStrengthInDBm;
                 OnPropertyChanged(nameof(Devices));
-            });
-            return;
-        }
-
-        App.Current.Dispatcher.Invoke(() =>
-        {
+                return;
+            }
+            // Avoid duplicate paired entry: same name Micropad might already be in list from LoadPairedDevices
+            var byName = Devices.FirstOrDefault(d => d.Name.Contains("Micropad", StringComparison.OrdinalIgnoreCase) && d.DeviceId != null);
+            if (byName != null)
+            {
+                byName.BluetoothAddress = args.BluetoothAddress;
+                byName.Rssi = args.RawSignalStrengthInDBm;
+                byName.Name = name;
+                OnPropertyChanged(nameof(Devices));
+                return;
+            }
             Devices.Add(new BleDiscoveredDevice
             {
                 BluetoothAddress = args.BluetoothAddress,
@@ -141,14 +185,21 @@ public partial class DevicesViewModel : ObservableObject
                 if (backoffMs[attempt] > 0)
                     await Task.Delay(backoffMs[attempt]);
 
-                // Resolve device ID from Bluetooth address (discovery was by advertisement, not DeviceInformation)
-                var device = await BluetoothLEDevice.FromBluetoothAddressAsync(SelectedDevice.BluetoothAddress);
-                if (device == null)
+                string deviceId;
+                if (!string.IsNullOrEmpty(SelectedDevice.DeviceId))
                 {
-                    throw new InvalidOperationException("Could not open device from address. Remove from Bluetooth settings, power-cycle Micropad, then try again.");
+                    deviceId = SelectedDevice.DeviceId;
                 }
-                var deviceId = device.DeviceInformation.Id;
-                device.Dispose();
+                else
+                {
+                    var device = await BluetoothLEDevice.FromBluetoothAddressAsync(SelectedDevice.BluetoothAddress);
+                    if (device == null)
+                    {
+                        throw new InvalidOperationException("Could not open device from address. Remove from Bluetooth settings, power-cycle Micropad, then try again.");
+                    }
+                    deviceId = device.DeviceInformation.Id;
+                    device.Dispose();
+                }
 
                 await _connection.ConnectAsync(deviceId);
 

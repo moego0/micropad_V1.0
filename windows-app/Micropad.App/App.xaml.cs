@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -73,7 +74,12 @@ public partial class App : Application
         if (settings.AutoConnect && !string.IsNullOrEmpty(settings.LastDeviceId))
         {
             var connection = _host.Services.GetRequiredService<Micropad.Core.Interfaces.IDeviceConnection>();
-            _ = connection.ConnectAsync(settings.LastDeviceId);
+            async Task TryAutoConnect()
+            {
+                await Task.Delay(800);
+                try { await connection.ConnectAsync(settings.LastDeviceId!); } catch { /* ignore */ }
+            }
+            _ = TryAutoConnect();
         }
 
         // Show main window

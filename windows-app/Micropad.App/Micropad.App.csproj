@@ -7,6 +7,7 @@
     <UseWPF>true</UseWPF>
     <Platforms>x64</Platforms>
     <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +22,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Micropad.Core\Micropad.Core.csproj" />
     <ProjectReference Include="..\Micropad.Services\Micropad.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\opning_logo-dark.png" />
+    <Resource Include="Assets\logo_darkmode.png" />
   </ItemGroup>
 
 </Project>
