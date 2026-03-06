@@ -148,9 +148,34 @@ export interface DeviceCaps {
 
 export type ConnectionState =
   | 'idle'
+  | 'requestingAccess'
+  | 'reconnectingGrantedDevice'
+  | 'connectingGatt'
+  | 'configConnected'
+  | 'hidConnected'
+  | 'hidReady'
+  | 'busyWithOtherHost'
+  | 'error'
   | 'scanning'
   | 'pairing'
   | 'connecting'
   | 'ready'
-  | 'reconnecting'
-  | 'error';
+  | 'reconnecting';
+
+/** Connection status from firmware getConnectionStatus (truthful) */
+export interface ConnectionStatus {
+  configConnected: boolean;
+  hidHostConnected: boolean;
+  hidReady: boolean;
+  advertising: boolean;
+  clientCount: number;
+  canAcceptConfigConnection: boolean;
+  reason: string;
+}
+
+/** For device manager UI (previously granted device) */
+export interface GrantedDeviceInfo {
+  id: string;
+  name: string;
+  device?: BluetoothDevice;
+}

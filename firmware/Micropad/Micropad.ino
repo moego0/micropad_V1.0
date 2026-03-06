@@ -77,6 +77,7 @@ void setup() {
     protocolHandler.init(&profileManager);
     bleConfig.begin(&protocolHandler);
     protocolHandler.setBLEService(&bleConfig);
+    protocolHandler.setBLEKeyboard(&bleKeyboard);
 
     // Order required: HID + Config must be registered before advertising (so GATT has config service 4fafc201-...)
     bleKeyboard.startAdvertising();
@@ -116,6 +117,7 @@ void loop() {
     
     // Update communication
     bleConfig.update();
+    protocolHandler.processDeferred();
     wifiManager.update();
     
     // Check for key combos

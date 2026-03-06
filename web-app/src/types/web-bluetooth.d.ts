@@ -8,6 +8,7 @@ declare interface RequestDeviceOptions {
 
 declare interface BluetoothRemoteGATTCharacteristic {
   value?: DataView | null;
+  writeValue(data: BufferSource | Uint8Array): Promise<void>;
   writeValueWithoutResponse(data: BufferSource | Uint8Array): Promise<void>;
   startNotifications(): Promise<void>;
   stopNotifications(): Promise<void>;
@@ -27,6 +28,7 @@ declare interface BluetoothRemoteGATTService {
 }
 
 declare interface BluetoothDevice {
+  id?: string;
   gatt?: BluetoothRemoteGATTServer | null;
   name?: string;
   addEventListener(type: 'gattserverdisconnected', listener: (e: Event) => void): void;
@@ -34,6 +36,7 @@ declare interface BluetoothDevice {
 
 declare interface NavigatorBluetooth {
   requestDevice(options?: RequestDeviceOptions): Promise<BluetoothDevice>;
+  getDevices?(): Promise<BluetoothDevice[]>;
 }
 
 declare interface Navigator {

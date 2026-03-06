@@ -1,10 +1,13 @@
 #include "protocol_handler.h"
 #include "ble_config.h"
+#include "ble_hid.h"
 #include "profile_manager.h"
 
 ProtocolHandler::ProtocolHandler() {
     _profileManager = nullptr;
     _bleService = nullptr;
+    _bleKeyboard = nullptr;
+    _processingDeferred = false;
 }
 
 void ProtocolHandler::init(ProfileManager* profileManager) {
@@ -16,15 +19,28 @@ void ProtocolHandler::setBLEService(BLEConfigService* bleService) {
     _bleService = bleService;
 }
 
+void ProtocolHandler::setBLEKeyboard(BLEKeyboard* bleKeyboard) {
+    _bleKeyboard = bleKeyboard;
+}
+
 void ProtocolHandler::handleMessage(const String& json) {
     DEBUG_PRINTF("Protocol RX: %s\n", json.substring(0, 200).c_str());
     
-    // Parse JSON
-    DynamicJsonDocument doc(4096);
+    // Parse JSON - use larger buffer for setProfile (full profile can be 6KB+)
+    DynamicJsonDocument doc(10240);
     DeserializationError error = deserializeJson(doc, json);
     
     if (error) {
-        DEBUG_PRINTF("JSON parse error: %s\n", error.c_str());
+        DEBUG_PRINTF("JSON parse error: %s (len=%d)\n", error.c_str(), json.length());
+        uint32_t reqId = 0;
+        int idPos = json.indexOf("\"id\":");
+        if (idPos >= 0) {
+            idPos += 5;
+            int endPos = idPos;
+            while (endPos < (int)json.length() && (isDigit(json.charAt(endPos)) || json.charAt(endPos) == '-')) endPos++;
+            reqId = (uint32_t)json.substring(idPos, endPos).toInt();
+        }
+        if (reqId != 0) sendResponse(reqId, false, String("JSON error: ") + error.c_str());
         return;
     }
     
@@ -63,7 +79,9 @@ void ProtocolHandler::handleMessage(const String& json) {
         handleGetProfile(id, profileId);
     }
     else if (cmd == "setProfile") {
-        handleSetProfile(id, doc);
+        // Defer to main loop so BLE callback returns immediately (prevents disconnect)
+        _deferredMessage = json;
+        return;
     }
     else if (cmd == "setActiveProfile") {
         uint8_t profileId = doc["profileId"] | 0;
@@ -79,6 +97,9 @@ void ProtocolHandler::handleMessage(const String& json) {
     else if (cmd == "getStats") {
         handleGetStats(id);
     }
+    else if (cmd == "getConnectionStatus") {
+        handleGetConnectionStatus(id);
+    }
     else if (cmd == "factoryReset") {
         handleFactoryReset(id);
     }
@@ -89,6 +110,34 @@ void ProtocolHandler::handleMessage(const String& json) {
         DEBUG_PRINTF("Unknown command: %s\n", cmd.c_str());
         sendResponse(id, false, "Unknown command");
     }
+}
+
+void ProtocolHandler::processDeferred() {
+    if (_deferredMessage.length() == 0) return;
+    
+    String json = _deferredMessage;
+    _deferredMessage = "";
+    _processingDeferred = true;
+    
+    DynamicJsonDocument doc(10240);
+    DeserializationError error = deserializeJson(doc, json);
+    if (error) {
+        _processingDeferred = false;
+        uint32_t reqId = 0;
+        int idPos = json.indexOf("\"id\":");
+        if (idPos >= 0) {
+            idPos += 5;
+            int endPos = idPos;
+            while (endPos < (int)json.length() && (isDigit(json.charAt(endPos)) || json.charAt(endPos) == '-')) endPos++;
+            reqId = (uint32_t)json.substring(idPos, endPos).toInt();
+        }
+        if (reqId != 0) sendResponse(reqId, false, String("JSON error: ") + error.c_str());
+        return;
+    }
+    
+    uint32_t id = doc["id"] | 0;
+    handleSetProfile(id, doc);
+    _processingDeferred = false;
 }
 
 void ProtocolHandler::handleGetDeviceInfo(uint32_t requestId) {
@@ -281,6 +330,34 @@ void ProtocolHandler::handleReboot(uint32_t requestId) {
     
     delay(100);
     ESP.restart();
+}
+
+void ProtocolHandler::handleGetConnectionStatus(uint32_t requestId) {
+    DynamicJsonDocument payload(256);
+    uint32_t clientCount = _bleService ? _bleService->getClientCount() : 0;
+    bool configConnected = _bleService && _bleService->isConfigClientActive();
+    bool hidHostConnected = _bleKeyboard && _bleKeyboard->isConnected();
+    bool hidReady = _bleKeyboard && _bleKeyboard->isHidReady();
+    bool canAcceptConfigConnection = (clientCount == 0);
+    
+    payload["configConnected"] = configConnected;
+    payload["hidHostConnected"] = hidHostConnected;
+    payload["hidReady"] = hidReady;
+    payload["advertising"] = (clientCount == 0);  // When no client, we advertise
+    payload["clientCount"] = clientCount;
+    payload["canAcceptConfigConnection"] = canAcceptConfigConnection;
+    
+    const char* reason = "ok";
+    if (clientCount > 0 && !configConnected && hidHostConnected) {
+        reason = "busy_with_hid_host";
+    } else if (clientCount > 0 && configConnected) {
+        reason = "ok";
+    } else if (clientCount == 0) {
+        reason = "not_connected";
+    }
+    payload["reason"] = reason;
+    
+    sendResponse(requestId, payload);
 }
 
 void ProtocolHandler::sendResponse(uint32_t requestId, bool success, const String& error) {

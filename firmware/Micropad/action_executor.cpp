@@ -9,7 +9,7 @@ void ActionExecutor::init(BLEKeyboard* bleKeyboard) {
 }
 
 void ActionExecutor::execute(const Action& action) {
-    if (!_bleKeyboard || !_bleKeyboard->isConnected()) {
+    if (!_bleKeyboard || !_bleKeyboard->isHidReady()) {
         return;
     }
     

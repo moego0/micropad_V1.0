@@ -10,12 +10,14 @@ export class ProfileSyncService {
   ) {}
 
   async pushProfile (profile: Profile): Promise<boolean> {
-    if (!this.getConnected() || !this.getProtocol()) return false;
+    if (!this.getConnected()) throw new Error('Not connected. Open the Devices page and connect first.');
+    if (!this.getProtocol()) throw new Error('Protocol not ready.');
     return this.getProtocol()!.setProfile(profile);
   }
 
   async pullProfile (profileId: number): Promise<Profile | null> {
-    if (!this.getConnected() || !this.getProtocol()) return null;
+    if (!this.getConnected()) throw new Error('Not connected. Open the Devices page and connect first.');
+    if (!this.getProtocol()) throw new Error('Protocol not ready.');
     return this.getProtocol()!.getProfile(profileId);
   }
 
@@ -30,7 +32,8 @@ export class ProfileSyncService {
   }
 
   async setActiveProfile (profileId: number): Promise<boolean> {
-    if (!this.getConnected() || !this.getProtocol()) return false;
+    if (!this.getConnected()) throw new Error('Not connected. Open the Devices page and connect first.');
+    if (!this.getProtocol()) throw new Error('Protocol not ready.');
     return this.getProtocol()!.setActiveProfile(profileId);
   }
 
@@ -41,7 +44,8 @@ export class ProfileSyncService {
   }
 
   async deleteProfileFromDevice (profileId: number): Promise<boolean> {
-    if (!this.getConnected() || !this.getProtocol()) return false;
+    if (!this.getConnected()) throw new Error('Not connected. Open the Devices page and connect first.');
+    if (!this.getProtocol()) throw new Error('Protocol not ready.');
     return this.getProtocol()!.deleteProfile(profileId);
   }
 

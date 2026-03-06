@@ -16,10 +16,26 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const batteryLevel = useDeviceStore((s) => s.batteryLevel);
   const deviceName = useDeviceStore((s) => s.deviceName);
 
-  const connectionColor =
-    connectionState === 'ready' ? 'bg-green-500' : connectionState === 'error' ? 'bg-red-500' : 'bg-surface-input';
-  const connectionLabel =
-    connectionState === 'ready' ? 'Connected' : connectionState === 'error' ? 'Error' : connectionState === 'connecting' || connectionState === 'pairing' ? 'Connecting…' : 'Disconnected';
+  const isConfigConnected = ['configConnected', 'hidConnected', 'hidReady'].includes(connectionState);
+  const isFullyReady = connectionState === 'hidReady';
+  const connectionColor = isConfigConnected
+    ? isFullyReady
+      ? 'bg-green-500'
+      : 'bg-amber-500'
+    : connectionState === 'error'
+      ? 'bg-red-500'
+      : 'bg-surface-input';
+  const connectionLabel = connectionState === 'error'
+    ? 'Error'
+    : isFullyReady
+      ? 'Connected'
+      : isConfigConnected
+        ? 'Config only'
+        : connectionState === 'requestingAccess' || connectionState === 'reconnectingGrantedDevice' || connectionState === 'connectingGatt'
+          ? 'Connecting…'
+          : connectionState === 'busyWithOtherHost'
+            ? 'Busy (PC)'
+            : 'Disconnected';
 
   return (
     <div className="flex h-screen flex-col bg-surface-primary relative overflow-hidden">
@@ -61,7 +77,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
       </div>
       <footer className="flex-shrink-0 border-t border-border/80 bg-surface-secondary/90 backdrop-blur px-4 py-2.5 flex items-center justify-between text-xs text-text-secondary relative z-10">
         <span>
-          {deviceName && connectionState === 'ready' ? `${deviceName} • ` : ''}
+          {deviceName && isConfigConnected ? `${deviceName} • ` : ''}
           Last sync: —
         </span>
         <div className="flex items-center gap-3">

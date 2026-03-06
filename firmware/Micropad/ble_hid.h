@@ -132,6 +132,12 @@ public:
     void onConnect();
     void onDisconnect(int reason);
     
+    // Called when a client subscribes to HID report (indicates HID host, not config-only)
+    void onHidHostSubscribed();
+    
+    // Public for action executor and protocol status
+    bool isHidReady() const;
+    
 private:
     NimBLEHIDDevice* _hid;
     NimBLECharacteristic* _inputKeyboard;
@@ -144,7 +150,6 @@ private:
     uint8_t _keyReport[8];
     uint8_t _mouseReport[4];
     
-    bool isHidReady() const;   // _connected && millis() >= _readyAtMs
     void _sendKeyboardReport();
     void _clearKeyboardReport();
 };

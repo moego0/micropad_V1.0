@@ -36,6 +36,7 @@ BLEConfigService::BLEConfigService() {
     _evtChar = nullptr;
     _bulkChar = nullptr;
     _protocolHandler = nullptr;
+    _configClientActive = false;
     _isReceivingChunked = false;
     _chunkIndex = 0;
     _totalChunks = 0;
@@ -87,7 +88,13 @@ void BLEConfigService::begin(ProtocolHandler* handler) {
 }
 
 void BLEConfigService::update() {
-    // Nothing to do in update for now
+    if (_server && _server->getConnectedCount() == 0) {
+        _configClientActive = false;
+    }
+}
+
+bool BLEConfigService::isConfigClientActive() {
+    return _configClientActive;
 }
 
 void BLEConfigService::sendEvent(const String& jsonEvent) {
@@ -115,6 +122,7 @@ uint32_t BLEConfigService::getClientCount() {
 }
 
 void BLEConfigService::handleWrite(NimBLECharacteristic* pChar) {
+    _configClientActive = true;  // This connection is using config service (browser or app)
     String value = pChar->getValue().c_str();
     
     if (value.length() == 0) {
@@ -173,6 +181,9 @@ void BLEConfigService::handleChunkedMessage(const String& chunk) {
     _chunkIndex++;
     
     DEBUG_PRINTF("Chunk %d/%d received (%d bytes)\n", _chunkIndex, _totalChunks, data.length());
+    
+    // Do NOT send chunkAck here - it can flood the link and cause disconnect.
+    // Web app uses fixed delay between chunks.
     
     // Check if complete
     if (_chunkIndex >= _totalChunks) {

@@ -132,10 +132,31 @@ App should support both `type: "response"` and `type: "RESP"`, and check `payloa
 | **SET_ACTIVE_PROFILE** | `cmd: "setActiveProfile", profileId` | `ok: true`, then event `profileChanged` |
 | **GET_ACTIVE_PROFILE** | `cmd: "getActiveProfile"` | `payload: { profileId }` — **To add** in firmware. |
 | **getStats** | `cmd: "getStats"` | `keyPresses[]`, `encoderTurns[]`, `uptime` |
+| **getConnectionStatus** | `cmd: "getConnectionStatus"` | See below. |
 | **factoryReset** | `cmd: "factoryReset"` | Reset profiles to defaults. |
 | **reboot** | `cmd: "reboot"` | Device restarts. |
 
 Optional: `LIST_MACROS`, `GET_MACRO`, `PUT_MACRO`, `DELETE_MACRO` if macros are stored on device; otherwise macros live only on PC and are embedded in profile on push.
+
+---
+
+## getConnectionStatus
+
+Returns truthful connection state (config client vs HID host vs HID ready).
+
+**Response payload:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `configConnected` | boolean | A client has connected and used the config service (CMD write). |
+| `hidHostConnected` | boolean | A client has subscribed to HID report(s) (HID host). |
+| `hidReady` | boolean | HID host connected and report delay elapsed; key/media/mouse reports are sent. |
+| `advertising` | boolean | No BLE client connected (device is advertising). |
+| `clientCount` | number | Number of BLE clients (0 or 1 with single-link NimBLE). |
+| `canAcceptConfigConnection` | boolean | `clientCount === 0`; browser can connect for config. |
+| `reason` | string | `"ok"`, `"busy_with_hid_host"`, `"not_connected"`, etc. |
+
+When the PC is connected as HID, `configConnected` is false and `reason` is `"busy_with_hid_host"`; the web app can show "Config channel unavailable while HID host owns the link".
 
 ---
 
@@ -151,9 +172,18 @@ Layers (future): e.g. **layers**: [ { keys[], encoders[] }, ... ] for Layer0, La
 
 ---
 
-## Chunking (Large Payloads)
+### Chunked transfer (App → Device, flow control)
 
-BLE MTU limits single write size (~512 bytes typical). Messages larger than ~512 bytes **UTF-8** must be chunked.
+Messages larger than 512 bytes are sent as chunks: `{"chunk":0,"total":N,"dataB64":"..."}`. To avoid GATT overflow and "operation in progress" errors:
+
+1. App sends one chunk at a time.
+2. **Device sends `chunkAck` after each chunk** on EVT: `{"chunkAck":<index>}`.
+3. App waits for the matching `chunkAck` (or timeout) before sending the next chunk.
+4. Only one logical request is in flight (send queue/lock on the app).
+
+This keeps the BLE stack and device buffer from being overwhelmed and makes Push/Pull stable.
+
+---
 
 ### App → Device (Send)
 

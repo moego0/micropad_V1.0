@@ -220,10 +220,19 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
         await sync.saveProfileLocally(editingProfile);
         set((s) => ({ ...s, statusText: `Pushed '${editingProfile.name}' to device` }));
       } else {
-        set((s) => ({ ...s, statusText: 'Failed to push (check connection)' }));
+        set((s) => ({
+          ...s,
+          statusText:
+            'Device did not respond or returned an error. Disconnect on the Devices page, reconnect, then try again. If the profile is large, try a smaller one first.'
+        }));
       }
     } catch (e) {
-      set((s) => ({ ...s, pushStepText: 'Error', statusText: `Failed: ${(e as Error).message}` }));
+      const msg = (e as Error).message;
+      set((s) => ({
+        ...s,
+        pushStepText: 'Error',
+        statusText: msg.includes('Not connected') ? msg : `Failed: ${msg}`
+      }));
     } finally {
       set((s) => ({ ...s, isPushInProgress: false, pushStepText: '' }));
     }
@@ -237,7 +246,11 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     try {
       const full = await sync.pullProfile(selectedProfile.id);
       if (!full) {
-        set((s) => ({ ...s, statusText: 'Failed to pull (check connection)' }));
+        set((s) => ({
+          ...s,
+          statusText:
+            'Device did not respond. Disconnect on the Devices page, reconnect, then try Pull again.'
+        }));
         return;
       }
       ensureKeys(full);
@@ -255,7 +268,11 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
         statusText: `Pulled '${full.name}' from device`
       }));
     } catch (e) {
-      set((s) => ({ ...s, statusText: `Pull failed: ${(e as Error).message}` }));
+      const msg = (e as Error).message;
+      set((s) => ({
+        ...s,
+        statusText: msg.includes('Not connected') ? msg : `Pull failed: ${msg}`
+      }));
     }
   },
 
@@ -362,19 +379,27 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     if (!selectedProfile) return;
     const sync = useDeviceStore.getState().syncService;
     if (!sync) return;
-    const ok = await sync.deleteProfileFromDevice(selectedProfile.id);
-    if (ok) {
-      const newList = profiles.filter((p) => p.id !== selectedProfile.id);
-      const next = newList[0] ?? null;
-      set((s) => ({
-        ...s,
-        profiles: newList,
-        selectedProfile: next,
-        editingProfile: next ? cloneProfile(next) : null,
-        statusText: 'Profile deleted from device'
-      }));
-    } else {
-      set((s) => ({ ...s, statusText: 'Could not delete from device' }));
+    try {
+      const ok = await sync.deleteProfileFromDevice(selectedProfile.id);
+      if (ok) {
+        const newList = profiles.filter((p) => p.id !== selectedProfile.id);
+        const next = newList[0] ?? null;
+        set((s) => ({
+          ...s,
+          profiles: newList,
+          selectedProfile: next,
+          editingProfile: next ? cloneProfile(next) : null,
+          statusText: 'Profile deleted from device'
+        }));
+      } else {
+        set((s) => ({
+          ...s,
+          statusText: 'Device did not respond. Disconnect, reconnect, then try again.'
+        }));
+      }
+    } catch (e) {
+      const msg = (e as Error).message;
+      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? msg : `Failed: ${msg}` }));
     }
   },
 
@@ -383,9 +408,14 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     if (!selectedProfile) return;
     const sync = useDeviceStore.getState().syncService;
     if (!sync) return;
-    const ok = await sync.setActiveProfile(selectedProfile.id);
-    if (ok) set((s) => ({ ...s, activeProfileId: selectedProfile.id, statusText: `Activated: ${selectedProfile.name}` }));
-    else set((s) => ({ ...s, statusText: 'Failed to activate' }));
+    try {
+      const ok = await sync.setActiveProfile(selectedProfile.id);
+      if (ok) set((s) => ({ ...s, activeProfileId: selectedProfile.id, statusText: `Activated: ${selectedProfile.name}` }));
+      else set((s) => ({ ...s, statusText: 'Device did not respond. Disconnect, reconnect, then try again.' }));
+    } catch (e) {
+      const msg = (e as Error).message;
+      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? msg : `Failed: ${msg}` }));
+    }
   },
 
   setStatus: (statusText) => set((s) => ({ ...s, statusText })),

@@ -21,6 +21,7 @@ public:
     // Connection status
     bool isConnected();
     uint32_t getClientCount();
+    bool isConfigClientActive();  // True after at least one CMD write from connected client
     
     friend class ConfigCharCallbacks;
     
@@ -32,6 +33,8 @@ private:
     NimBLECharacteristic* _bulkChar;
     
     ProtocolHandler* _protocolHandler;
+    
+    bool _configClientActive;  // True when we have received a CMD write this connection (browser config client)
     
     String _rxBuffer;
     bool _isReceivingChunked;

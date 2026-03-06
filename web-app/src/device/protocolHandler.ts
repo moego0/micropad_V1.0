@@ -112,7 +112,7 @@ export class ProtocolHandler {
           this.pending.delete(id);
           resolve(null);
         }
-      }, 8000);
+      }, 35000);
 
       this.pending.set(id, {
         resolve: (m) => {
@@ -160,9 +160,24 @@ export class ProtocolHandler {
   async setProfile (profile: Profile): Promise<boolean> {
     const res = await this.sendRequest({
       cmd: 'setProfile',
-      profile: profile as unknown as Record<string, unknown>
+      profile: this.profileForDevice(profile) as unknown as Record<string, unknown>
     });
-    return (res?.payload as { success?: boolean })?.success === true;
+    const payload = res?.payload as { success?: boolean; error?: string } | undefined;
+    if (payload?.success === true) return true;
+    if (payload?.error) throw new Error(payload.error);
+    return false;
+  }
+
+  /** Strip fields the device doesn't use to reduce payload size and avoid parse errors */
+  private profileForDevice (profile: Profile): Record<string, unknown> {
+    const p = profile as unknown as Record<string, unknown>;
+    return {
+      id: p.id,
+      name: p.name,
+      version: p.version,
+      keys: p.keys,
+      encoders: p.encoders
+    };
   }
 
   async setActiveProfile (profileId: number): Promise<boolean> {
@@ -184,5 +199,28 @@ export class ProtocolHandler {
   async getStats (): Promise<Record<string, unknown> | null> {
     const res = await this.sendRequest({ cmd: 'getStats', payload: {} });
     return (res?.payload ?? null) as Record<string, unknown> | null;
+  }
+
+  async getConnectionStatus (): Promise<{
+    configConnected: boolean;
+    hidHostConnected: boolean;
+    hidReady: boolean;
+    advertising: boolean;
+    clientCount: number;
+    canAcceptConfigConnection: boolean;
+    reason: string;
+  } | null> {
+    const res = await this.sendRequest({ cmd: 'getConnectionStatus', payload: {} });
+    const p = res?.payload as Record<string, unknown> | undefined;
+    if (!p) return null;
+    return {
+      configConnected: !!p.configConnected,
+      hidHostConnected: !!p.hidHostConnected,
+      hidReady: !!p.hidReady,
+      advertising: !!p.advertising,
+      clientCount: (p.clientCount as number) ?? 0,
+      canAcceptConfigConnection: !!p.canAcceptConfigConnection,
+      reason: (p.reason as string) ?? 'unknown'
+    };
   }
 }

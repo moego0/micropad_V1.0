@@ -26,6 +26,17 @@ public:
     }
 };
 
+// Callback for HID report characteristics: only treat as HID host when client subscribes to reports
+class HidReportSubscribeCallbacks : public NimBLECharacteristicCallbacks {
+public:
+    void onSubscribe(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo, uint16_t subValue) override {
+        (void)pCharacteristic;
+        (void)connInfo;
+        (void)subValue;
+        if (g_pKeyboard) g_pKeyboard->onHidHostSubscribed();
+    }
+};
+
 // Combined HID Report Descriptor (keyboard + LED, consumer 16-bit, mouse) - improves Windows driver compatibility
 static const uint8_t _hidReportDescriptor[] = {
     // Keyboard Report (8 bytes) with LED output
@@ -160,6 +171,10 @@ void BLEKeyboard::begin(const char* deviceName, const char* manufacturer) {
         g_pKeyboard = nullptr;
         return;
     }
+    // Only treat connection as HID host when client subscribes to reports (Windows does; browser config does not)
+    _inputKeyboard->setCallbacks(new HidReportSubscribeCallbacks());
+    _inputMediaKeys->setCallbacks(new HidReportSubscribeCallbacks());
+    _inputMouse->setCallbacks(new HidReportSubscribeCallbacks());
     _hid->setBatteryLevel(100);
     // Optional: add model/serial/fw to library's Device Info before start (must be before startServices)
     NimBLEService* pDi = _hid->getDeviceInfoService();
@@ -202,10 +217,17 @@ void BLEKeyboard::end() {
 }
 
 void BLEKeyboard::onConnect() {
+    // Do NOT set _connected here. HID host is detected when client subscribes to HID report (onHidHostSubscribed).
+    // Browser config-only connection will not subscribe to HID, so keys won't falsely be "ready".
+    Serial.println("[BLE] Client connected (HID ready only after host subscribes to reports)");
+}
+
+void BLEKeyboard::onHidHostSubscribed() {
+    if (_connected) return;  // Already marked as HID host
     _connected = true;
     _readyAtMs = millis() + HID_READY_DELAY_MS;
     _loggedHidReady = false;
-    Serial.printf("[BLE] HID ready in %lu ms (no reports until then)\n", (unsigned long)HID_READY_DELAY_MS);
+    Serial.printf("[BLE] HID host subscribed; reports enabled in %lu ms\n", (unsigned long)HID_READY_DELAY_MS);
 }
 
 void BLEKeyboard::onDisconnect(int reason) {

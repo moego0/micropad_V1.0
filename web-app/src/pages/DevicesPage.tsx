@@ -1,24 +1,67 @@
 import { useEffect } from 'react';
 import { useDeviceStore } from '../stores/deviceStore';
 
+function stateLabel(state: string): string {
+  switch (state) {
+    case 'idle':
+      return 'Idle';
+    case 'requestingAccess':
+      return 'Requesting access…';
+    case 'reconnectingGrantedDevice':
+      return 'Reconnecting…';
+    case 'connectingGatt':
+      return 'Connecting GATT…';
+    case 'configConnected':
+      return 'Config channel connected';
+    case 'hidConnected':
+      return 'HID host connected';
+    case 'hidReady':
+      return 'Ready (config + HID)';
+    case 'busyWithOtherHost':
+      return 'Device busy with PC';
+    case 'error':
+      return 'Error';
+    default:
+      return state;
+  }
+}
+
 export default function DevicesPage() {
   const init = useDeviceStore((s) => s.init);
   const connect = useDeviceStore((s) => s.connect);
   const disconnect = useDeviceStore((s) => s.disconnect);
+  const requestAccess = useDeviceStore((s) => s.requestAccess);
+  const reconnectToGranted = useDeviceStore((s) => s.reconnectToGranted);
+  const refreshGrantedDevices = useDeviceStore((s) => s.refreshGrantedDevices);
   const connectionState = useDeviceStore((s) => s.connectionState);
+  const connectionStatus = useDeviceStore((s) => s.connectionStatus);
   const lastError = useDeviceStore((s) => s.lastError);
   const deviceInfo = useDeviceStore((s) => s.deviceInfo);
+  const grantedDevices = useDeviceStore((s) => s.grantedDevices);
+  const currentBleDevice = useDeviceStore((s) => s.ble?.currentDevice ?? null);
   const isSupported = useDeviceStore((s) => s.isWebBluetoothSupported);
 
   useEffect(() => {
     init();
   }, [init]);
 
-  const stepIndex =
-    connectionState === 'scanning' ? 1 : connectionState === 'connecting' || connectionState === 'pairing' ? 2 : connectionState === 'ready' ? 3 : 0;
+  const isConnecting =
+    connectionState === 'requestingAccess' ||
+    connectionState === 'reconnectingGrantedDevice' ||
+    connectionState === 'connectingGatt';
+  const isConfigConnected =
+    connectionState === 'configConnected' ||
+    connectionState === 'hidConnected' ||
+    connectionState === 'hidReady';
+  const isFullyReady = connectionState === 'hidReady';
+  const isBusyWithHost = connectionState === 'busyWithOtherHost';
 
-  const handleConnect = () => {
-    connect();
+  const handleRequestAccess = () => {
+    requestAccess();
+  };
+
+  const handleReconnect = (device: BluetoothDevice) => {
+    reconnectToGranted(device);
   };
 
   if (!isSupported()) {
@@ -45,75 +88,123 @@ export default function DevicesPage() {
       <h1 className="text-2xl font-bold text-text-primary mb-2">Bluetooth Devices</h1>
       <div className="h-1 w-12 bg-brand-blue rounded mb-4" />
       <p className="text-text-secondary mb-6 max-w-2xl">
-        Connect to your Micropad over Bluetooth. Click <span className="font-semibold text-text-primary">Connect</span> to open the
-        browser pairing dialog (a user gesture is required).
+        Connect to your Micropad over Bluetooth. Use <span className="font-semibold text-text-primary">Reconnect</span> for
+        a device you’ve already allowed, or <span className="font-semibold text-text-primary">Request access</span> to
+        open the browser pairing dialog (user gesture required).
       </p>
 
-      {/* Connection journey */}
-      <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-4 mb-6 shadow-lg shadow-black/40">
-        <div className="flex items-center justify-between max-w-md mx-auto gap-2">
-          {['Scan', 'Found', 'Pairing', 'Ready'].map((label, i) => (
-            <div key={label} className="flex flex-col items-center">
-              <div
-                className={`h-7 w-7 rounded-full transition-all duration-300 ${
-                  stepIndex > i
-                    ? 'bg-brand-blue shadow-[0_0_0_4px_rgba(56,189,248,0.25)] scale-100'
-                    : stepIndex === i && i === 3
-                      ? 'bg-green-500 shadow-[0_0_0_4px_rgba(34,197,94,0.25)] scale-100'
-                      : 'bg-surface-tertiary scale-95'
-                }`}
-              />
-              <span className="text-xs text-text-secondary mt-1">{label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
-          <h2 className="font-semibold text-text-primary mb-3">Device</h2>
-          <p className="text-sm text-text-secondary mb-4">
-            Web Bluetooth will show a system dialog to choose the Micropad. Ensure the device is on and in range.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleConnect}
-              disabled={connectionState === 'connecting' || connectionState === 'pairing'}
-              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-emerald-500/40 hover:shadow-lg hover:shadow-emerald-400/60 transition"
-            >
-              Connect
-            </button>
-            <button
-              onClick={() => disconnect()}
-              className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white rounded-full font-medium text-sm shadow-md shadow-red-500/40 hover:shadow-lg hover:shadow-red-400/60 transition"
-            >
-              Disconnect
-            </button>
+      {/* Connection status card */}
+      <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
+        <h2 className="font-semibold text-text-primary mb-3">Connection status</h2>
+        <p className="text-sm text-text-secondary mb-2">
+          <span className="font-medium text-text-primary">State:</span> {stateLabel(connectionState)}
+        </p>
+        {connectionStatus && (
+          <div className="text-xs text-text-tertiary space-y-1 mb-3">
+            <p>Config channel: {connectionStatus.configConnected ? 'Yes' : 'No'}</p>
+            <p>HID host connected: {connectionStatus.hidHostConnected ? 'Yes' : 'No'}</p>
+            <p>HID ready (reports enabled): {connectionStatus.hidReady ? 'Yes' : 'No'}</p>
+            <p>Can accept config: {connectionStatus.canAcceptConfigConnection ? 'Yes' : 'No'}</p>
+            <p>Reason: {connectionStatus.reason}</p>
           </div>
-          {lastError && (
-            <p className="mt-3 text-sm text-red-400" role="alert">
-              {lastError}
-            </p>
-          )}
+        )}
+        {isBusyWithHost && (
+          <p className="text-sm text-amber-500 mb-3">
+            Config channel unavailable while the device is connected to the PC as an input device. Disconnect from
+            Windows Bluetooth or wait until the PC disconnects to configure from the browser.
+          </p>
+        )}
+        {isConfigConnected && !isFullyReady && !isBusyWithHost && (
+          <p className="text-sm text-text-tertiary mb-3">
+            Config channel is connected. Keys and encoders will only send input to the PC when the Micropad is also
+            connected as a HID device (e.g. paired in Windows).
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleRequestAccess}
+            disabled={isConnecting}
+            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-emerald-500/40 transition"
+          >
+            Request access
+          </button>
+          <button
+            onClick={() => disconnect()}
+            disabled={!isConfigConnected}
+            className="px-4 py-2 bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white rounded-full font-medium text-sm shadow-md shadow-red-500/40 transition"
+          >
+            Disconnect
+          </button>
+          <button
+            onClick={() => refreshGrantedDevices()}
+            className="px-4 py-2 bg-surface-tertiary hover:bg-surface-tertiary/80 text-text-secondary rounded-full font-medium text-sm transition"
+          >
+            Refresh list
+          </button>
         </div>
-        <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
-          <h2 className="font-semibold text-text-primary mb-3">Device Information</h2>
-          {deviceInfo ? (
-            <pre className="text-xs text-text-secondary whitespace-pre-wrap">
-              ID: {deviceInfo.deviceId}
-              FW: {deviceInfo.firmwareVersion}
-              HW: {deviceInfo.hardwareVersion}
-              Battery: {deviceInfo.batteryLevel}%
-            </pre>
-          ) : (
-            <p className="text-sm text-text-tertiary">Select and connect to view info.</p>
-          )}
-          <p className="text-xs text-text-tertiary mt-2">State: {connectionState}</p>
-        </div>
+        {lastError && (
+          <p className="mt-3 text-sm text-red-400" role="alert">
+            {lastError}
+          </p>
+        )}
+        {lastError && (lastError.includes('busy') || lastError.includes('PC')) && (
+          <p className="mt-2 text-sm text-text-tertiary">
+            In Windows: Settings → Bluetooth & devices → find Micropad → click the three dots → Disconnect (or Remove device). Then try Request access or Reconnect again.
+          </p>
+        )}
       </div>
 
-      <p className="text-xs text-text-tertiary mt-6">
-        If Connect fails: remove Micropad from system Bluetooth settings, power-cycle the device, then try again.
+      {/* Previously granted devices */}
+      {grantedDevices.length > 0 && (
+        <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
+          <h2 className="font-semibold text-text-primary mb-3">Previously granted devices</h2>
+          <p className="text-sm text-text-secondary mb-4">
+            Reconnect without opening the pairing dialog. Device must be on and in range.
+          </p>
+          <ul className="space-y-3">
+            {grantedDevices.map((granted) => {
+              const isCurrent = isConfigConnected && granted.device === currentBleDevice;
+              return (
+                <li
+                  key={granted.id}
+                  className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-tertiary/50 border border-border/50"
+                >
+                  <div>
+                    <p className="font-medium text-text-primary">{granted.name}</p>
+                    <p className="text-xs text-text-tertiary">{granted.id}</p>
+                  </div>
+                  <button
+                    onClick={() => granted.device && handleReconnect(granted.device)}
+                    disabled={isConnecting || isCurrent}
+                    className="px-4 py-2 bg-brand-blue hover:bg-brand-blue/90 disabled:opacity-50 text-white rounded-full font-medium text-sm transition"
+                  >
+                    {isCurrent ? 'Connected' : 'Reconnect'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Device info */}
+      <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
+        <h2 className="font-semibold text-text-primary mb-3">Device information</h2>
+        {deviceInfo ? (
+          <pre className="text-xs text-text-secondary whitespace-pre-wrap">
+            ID: {deviceInfo.deviceId}
+            FW: {deviceInfo.firmwareVersion}
+            HW: {deviceInfo.hardwareVersion}
+            Battery: {deviceInfo.batteryLevel}%
+          </pre>
+        ) : (
+          <p className="text-sm text-text-tertiary">Connect to a device to see info.</p>
+        )}
+      </div>
+
+      <p className="text-xs text-text-tertiary">
+        If the device doesn’t appear: ensure it’s on and advertising. If it’s already connected to the PC, it may not
+        show in the chooser until the PC disconnects. Use Reconnect for a previously granted device when possible.
       </p>
     </div>
   );
