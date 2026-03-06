@@ -1,0 +1,55 @@
+<Page x:Class="Micropad.App.Views.PresetsView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Templates"
+      Background="{StaticResource BackgroundPrimary}">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Profile Templates" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+            <Border Height="3" Width="48" CornerRadius="2" Margin="0,6,0,0" Background="{StaticResource BrandBlue}"/>
+            <TextBlock Text="Start from a preset for your favorite app. Requires app badge means the app was not detected on this PC."
+                      Foreground="{StaticResource TextSecondary}" Margin="0,10,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,30">
+            <ItemsControl ItemsSource="{Binding Presets}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,12" Padding="16" Background="{StaticResource BackgroundSecondary}"
+                                BorderBrush="{StaticResource BorderColor}" BorderThickness="1" CornerRadius="8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                        <Border Visibility="{Binding IsAppDetected, Converter={StaticResource InverseBoolToVisibility}}"
+                                                Background="#6c757d" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Requires app" FontSize="10" Foreground="White"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextSecondary}" 
+                                              TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Use this preset" Command="{Binding DataContext.UsePresetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                        CommandParameter="{Binding Id}" VerticalAlignment="Center" Padding="12,6"
+                                        Background="{StaticResource AccentBlue}" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="1" Text="{Binding StatusText}" VerticalAlignment="Bottom" Margin="0,8,0,0"
+                  Foreground="{StaticResource TextTertiary}" FontSize="12"/>
+    </Grid>
+</Page>

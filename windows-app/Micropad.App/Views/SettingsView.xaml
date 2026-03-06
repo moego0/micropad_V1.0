@@ -21,6 +21,38 @@
                 BorderBrush="{StaticResource BorderColor}" BorderThickness="1"
                 CornerRadius="8" Padding="20">
             <StackPanel>
+                <!-- Appearance: Theme + Reduce Motion -->
+                <TextBlock Text="Appearance" FontWeight="Bold" FontSize="14"
+                          Foreground="{StaticResource TextPrimary}" Margin="0,0,0,12"/>
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Dark theme" FontWeight="Bold"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="14"/>
+                        <TextBlock Text="Use dark theme (off = light theme)"
+                                  Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding IsDarkTheme}"
+                             VerticalAlignment="Center"/>
+                </Grid>
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Reduce motion" FontWeight="Bold"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="14"/>
+                        <TextBlock Text="Disable non-essential animations (accessibility)"
+                                  Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ReduceMotion}"
+                             VerticalAlignment="Center"/>
+                </Grid>
+
                 <!-- Auto Connect -->
                 <Grid Margin="0,0,0,20">
                     <Grid.ColumnDefinitions>
@@ -83,6 +115,51 @@
                     </StackPanel>
                     <CheckBox Grid.Column="1" IsChecked="{Binding AutoReconnect}" 
                              VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- Manual Lock + Default profile -->
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Manual Lock (auto profile)" FontWeight="Bold"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="14"/>
+                        <TextBlock Text="When on, app-based profile switching is paused until you turn it off."
+                                  Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ManualLock}" VerticalAlignment="Center"/>
+                </Grid>
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="80"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Default profile (when no app rule matches)" FontWeight="Bold"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="14"/>
+                        <TextBlock Text="Profile ID to switch to when foreground app has no mapping (0–7, or leave empty)."
+                                  Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <TextBox Grid.Column="1" Text="{Binding DefaultProfileIdText}" VerticalAlignment="Center"
+                             Background="{StaticResource BackgroundTertiary}" Foreground="{StaticResource TextPrimary}"
+                             Padding="8,6" ToolTip="0-7 or empty"/>
+                </Grid>
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="80"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Debounce (ms)" FontWeight="Bold"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="14"/>
+                        <TextBlock Text="Delay before switching profile (avoid rapid toggling)."
+                                  Foreground="{StaticResource TextSecondary}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <TextBox Grid.Column="1" Text="{Binding DebounceMsText}" VerticalAlignment="Center"
+                             Background="{StaticResource BackgroundTertiary}" Foreground="{StaticResource TextPrimary}"
+                             Padding="8,6"/>
                 </Grid>
 
                 <!-- Per-app profile switching -->

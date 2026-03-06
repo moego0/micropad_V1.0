@@ -81,6 +81,17 @@ bool ProfileManager::saveProfile(uint8_t id, const Profile& profile) {
     return _storage.saveProfile(profileCopy);
 }
 
+bool ProfileManager::saveProfileFromJson(JsonObjectConst obj) {
+    Profile profile;
+    if (!_storage.deserializeProfileFromObject(obj, profile)) {
+        return false;
+    }
+    if (profile.id >= MAX_PROFILES) {
+        return false;
+    }
+    return saveProfile(profile.id, profile);
+}
+
 bool ProfileManager::deleteProfile(uint8_t id) {
     if (id >= MAX_PROFILES) {
         return false;
@@ -145,6 +156,14 @@ bool ProfileManager::getProfileInfo(uint8_t id, char* name, size_t* size) {
 
 bool ProfileManager::loadProfileById(uint8_t id, Profile& profile) {
     return _storage.loadProfile(id, profile);
+}
+
+size_t ProfileManager::getFreeSpace() {
+    return _storage.getFreeSpace();
+}
+
+size_t ProfileManager::getTotalSpace() {
+    return _storage.getTotalSpace();
 }
 
 void ProfileManager::factoryReset() {

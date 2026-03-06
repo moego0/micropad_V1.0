@@ -29,9 +29,43 @@ public partial class ActionEditWindow : Window
         {"Up", 0x52}, {"Right", 0x4F}, {"Down", 0x51}, {"Win", 0xE3}
     };
 
-    public ActionEditWindow(KeyConfig keyConfig, int keyIndex) : this(keyConfig, keyIndex, null) { }
+    public ActionEditWindow(KeyConfig keyConfig, int keyIndex) : this(keyConfig, keyIndex, (IList<MacroAsset>?)null) { }
 
     public ActionEditWindow(KeyConfig keyConfig, int keyIndex, IList<string>? macroNames)
+    {
+        // Legacy: convert names to placeholder assets for compatibility
+        List<MacroAsset>? assets = null;
+        if (macroNames != null && macroNames.Count > 0)
+        {
+            assets = macroNames.Select(n => new MacroAsset { Name = n, MacroId = n }).ToList();
+        }
+        InitializeComponent();
+        _keyConfig = new KeyConfig
+        {
+            Index = keyIndex,
+            Type = keyConfig.Type,
+            Modifiers = keyConfig.Modifiers,
+            Key = keyConfig.Key,
+            Text = keyConfig.Text,
+            Function = keyConfig.Function,
+            Action = keyConfig.Action,
+            Value = keyConfig.Value,
+            ProfileId = keyConfig.ProfileId,
+            AppPath = keyConfig.AppPath,
+            Url = keyConfig.Url,
+            MacroId = keyConfig.MacroId,
+            MacroSnapshot = keyConfig.MacroSnapshot
+        };
+
+        LoadKeyList();
+        LoadMediaList();
+        LoadMouseList();
+        LoadMacroList(assets);
+        TypeCombo.SelectionChanged += TypeCombo_SelectionChanged;
+        LoadFromConfig();
+    }
+
+    public ActionEditWindow(KeyConfig keyConfig, int keyIndex, IList<MacroAsset>? macroAssets)
     {
         InitializeComponent();
         _keyConfig = new KeyConfig
@@ -47,25 +81,26 @@ public partial class ActionEditWindow : Window
             ProfileId = keyConfig.ProfileId,
             AppPath = keyConfig.AppPath,
             Url = keyConfig.Url,
-            MacroId = keyConfig.MacroId
+            MacroId = keyConfig.MacroId,
+            MacroSnapshot = keyConfig.MacroSnapshot
         };
 
         LoadKeyList();
         LoadMediaList();
         LoadMouseList();
-        LoadMacroList(macroNames);
+        LoadMacroList(macroAssets);
         TypeCombo.SelectionChanged += TypeCombo_SelectionChanged;
         LoadFromConfig();
     }
 
-    private void LoadMacroList(IList<string>? macroNames)
+    private void LoadMacroList(IList<MacroAsset>? macroAssets)
     {
         MacroCombo.Items.Clear();
-        MacroCombo.Items.Add("(None)");
-        if (macroNames != null)
+        MacroCombo.Items.Add(new MacroAsset { Name = "(None)", MacroId = "" });
+        if (macroAssets != null)
         {
-            foreach (var name in macroNames)
-                MacroCombo.Items.Add(name);
+            foreach (var a in macroAssets)
+                MacroCombo.Items.Add(a);
         }
     }
 
@@ -125,10 +160,15 @@ public partial class ActionEditWindow : Window
         ProfileIdInput.Text = _keyConfig.ProfileId.ToString();
         AppPathInput.Text = _keyConfig.AppPath ?? "";
         UrlInput.Text = _keyConfig.Url ?? "";
-        if (!string.IsNullOrEmpty(_keyConfig.MacroId) && MacroCombo.Items.Contains(_keyConfig.MacroId))
-            MacroCombo.SelectedItem = _keyConfig.MacroId;
+        if (!string.IsNullOrEmpty(_keyConfig.MacroId))
+        {
+            foreach (var item in MacroCombo.Items)
+                if (item is MacroAsset a && a.MacroId == _keyConfig.MacroId) { MacroCombo.SelectedItem = item; break; }
+            if (MacroCombo.SelectedIndex < 0) MacroCombo.SelectedIndex = 0;
+        }
         else
             MacroCombo.SelectedIndex = 0;
+        MacroEmbedCheck.IsChecked = _keyConfig.MacroSnapshot != null && _keyConfig.MacroSnapshot.Count > 0;
     }
 
     private void TypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -207,10 +247,16 @@ public partial class ActionEditWindow : Window
             return;
         }
         _keyConfig.Url = url;
-        if (_keyConfig.Type == ActionType.Macro && MacroCombo.SelectedItem is string macroName && macroName != "(None)")
-            _keyConfig.MacroId = macroName;
+        if (_keyConfig.Type == ActionType.Macro && MacroCombo.SelectedItem is MacroAsset macroAsset && !string.IsNullOrEmpty(macroAsset.MacroId))
+        {
+            _keyConfig.MacroId = macroAsset.MacroId;
+            _keyConfig.MacroSnapshot = MacroEmbedCheck.IsChecked == true ? (macroAsset.Steps?.Count > 0 ? new List<MacroStep>(macroAsset.Steps) : null) : null;
+        }
         else
+        {
             _keyConfig.MacroId = null;
+            _keyConfig.MacroSnapshot = null;
+        }
 
         Result = _keyConfig;
         DialogResult = true;

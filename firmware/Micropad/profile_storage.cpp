@@ -318,3 +318,48 @@ void ProfileStorage::_deserializeAction(JsonObjectConst obj, Action& action) {
             break;
     }
 }
+
+bool ProfileStorage::deserializeProfileFromObject(JsonObjectConst obj, Profile& profile) {
+    if (!_initialized) return false;
+    
+    profile.id = obj["id"] | 0;
+    strlcpy(profile.name, obj["name"] | "Unnamed", sizeof(profile.name));
+    profile.version = obj["version"] | 1;
+    
+    JsonArrayConst keysArray = obj["keys"].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < MATRIX_KEYS && i < keysArray.size(); i++) {
+        JsonObjectConst keyObj = keysArray[i].as<JsonObjectConst>();
+        _deserializeAction(keyObj, profile.keys[i].action);
+    }
+    for (size_t i = keysArray.size(); i < MATRIX_KEYS; i++) {
+        profile.keys[i].action.type = ACTION_NONE;
+    }
+    
+    for (uint8_t i = 0; i < 2; i++) {
+        profile.encoders[i].cwAction.type = ACTION_NONE;
+        profile.encoders[i].ccwAction.type = ACTION_NONE;
+        profile.encoders[i].pressAction.type = ACTION_NONE;
+        profile.encoders[i].acceleration = true;
+        profile.encoders[i].stepsPerDetent = 4;
+    }
+    
+    JsonArrayConst encodersArray = obj["encoders"].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < 2 && i < encodersArray.size(); i++) {
+        JsonObjectConst encObj = encodersArray[i].as<JsonObjectConst>();
+        
+        if (!encObj["cwAction"].isNull()) {
+            _deserializeAction(encObj["cwAction"].as<JsonObjectConst>(), profile.encoders[i].cwAction);
+        }
+        if (!encObj["ccwAction"].isNull()) {
+            _deserializeAction(encObj["ccwAction"].as<JsonObjectConst>(), profile.encoders[i].ccwAction);
+        }
+        if (!encObj["pressAction"].isNull()) {
+            _deserializeAction(encObj["pressAction"].as<JsonObjectConst>(), profile.encoders[i].pressAction);
+        }
+        
+        profile.encoders[i].acceleration = encObj["acceleration"] | true;
+        profile.encoders[i].stepsPerDetent = encObj["stepsPerDetent"] | 4;
+    }
+    
+    return true;
+}

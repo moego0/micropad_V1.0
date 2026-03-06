@@ -32,10 +32,13 @@ private:
     
     // Command handlers
     void handleGetDeviceInfo(uint32_t requestId);
+    void handleGetCaps(uint32_t requestId);
     void handleListProfiles(uint32_t requestId);
     void handleGetProfile(uint32_t requestId, uint8_t profileId);
     void handleSetProfile(uint32_t requestId, const JsonDocument& doc);
     void handleSetActiveProfile(uint32_t requestId, uint8_t profileId);
+    void handleGetActiveProfile(uint32_t requestId);
+    void handleDeleteProfile(uint32_t requestId, uint8_t profileId);
     void handleGetStats(uint32_t requestId);
     void handleFactoryReset(uint32_t requestId);
     void handleReboot(uint32_t requestId);

@@ -18,5 +18,8 @@ obj/
 packages/
 *.nupkg
 
+# Node (web-app)
+node_modules/
+
 # Logs
 *.log

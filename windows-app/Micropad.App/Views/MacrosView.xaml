@@ -207,9 +207,180 @@
                 </StackPanel>
             </Border>
 
-            <!-- Right: Tag palette (grouped, scrollable, click + drag) -->
+            <!-- Right: Macro steps + URL/App + Tag palette -->
             <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="16">
                 <StackPanel>
+                    <!-- Macro steps (record or add, reorder, save) -->
+                    <Border Background="{StaticResource BgSecondary}" CornerRadius="8" Padding="16" Margin="0,0,0,16"
+                            BorderBrush="{StaticResource Border}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Macro steps" FontSize="14" FontWeight="SemiBold"
+                                      Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Record or add steps, then save to the macro library." FontSize="11"
+                                      Foreground="{StaticResource TextSecondary}" Margin="0,0,0,10"/>
+                            <TextBlock Text="Name" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding MacroName, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                     Padding="8" Margin="0,0,0,10" FontSize="12"/>
+                            <WrapPanel Margin="0,0,0,8">
+                                <Button Content="Record" Command="{Binding StartRecordingCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource BrandBlue}"
+                                        Foreground="White" BorderThickness="0"/>
+                                <Button Content="Stop" Command="{Binding StopRecordingCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource Error}"
+                                        Foreground="White" BorderThickness="0"/>
+                                <Button Content="Add delay" Command="{Binding AddDelayCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource BgTertiary}"
+                                        Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource Border}" BorderThickness="1"/>
+                                <Button Content="Save macro" Command="{Binding SaveMacroCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource Success}"
+                                        Foreground="White" BorderThickness="0"/>
+                                <Button Content="Clear macro" Command="{Binding ClearMacroCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource BgTertiary}"
+                                        Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource Border}" BorderThickness="1"/>
+                                <Button Content="Export…" Command="{Binding ExportMacroCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource BgTertiary}"
+                                        Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource Border}" BorderThickness="1"
+                                        ToolTip="Export current macro to a JSON file"/>
+                                <Button Content="Import…" Command="{Binding ImportMacroCommand}" Margin="0,0,6,6"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource BgTertiary}"
+                                        Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource Border}" BorderThickness="1"
+                                        ToolTip="Import macro from a JSON file"/>
+                            </WrapPanel>
+                            <TextBlock Text="Add text (typed when macro runs)" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding TextToAdd, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                         Padding="8" Margin="0,0,8,0" FontSize="12" VerticalContentAlignment="Center"/>
+                                <Button Grid.Column="1" Content="Add text" Command="{Binding AddTextCommand}"
+                                        Padding="10,6" FontSize="11" Background="{StaticResource BgTertiary}"
+                                        Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource Border}" BorderThickness="1"/>
+                            </Grid>
+                            <!-- Step list: empty state -->
+                            <TextBlock Text="No steps yet. Record or add a delay/key." FontSize="11"
+                                      Foreground="{StaticResource TextTertiary}" Margin="0,8,0,0"
+                                      Visibility="{Binding IsStepsEmpty, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep}"
+                                     Margin="0,8,0,0" Background="Transparent" BorderThickness="0"
+                                     Foreground="{StaticResource TextPrimary}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,4" Padding="10,8" CornerRadius="6"
+                                                Background="{StaticResource BgTertiary}"
+                                                BorderBrush="{StaticResource Border}" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayText}" FontSize="12"
+                                                              Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <Button Command="{Binding DataContext.MoveStepUpCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                            CommandParameter="{Binding}" Content="↑" ToolTip="Move up"
+                                                            Padding="6,2" FontSize="10" Margin="0,0,2,0"
+                                                            Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}" BorderThickness="0"/>
+                                                    <Button Command="{Binding DataContext.MoveStepDownCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                            CommandParameter="{Binding}" Content="↓" ToolTip="Move down"
+                                                            Padding="6,2" FontSize="10" Margin="0,0,2,0"
+                                                            Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}" BorderThickness="0"/>
+                                                    <Button Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                            CommandParameter="{Binding}" Content="✕" ToolTip="Remove"
+                                                            Padding="6,2" FontSize="10"
+                                                            Background="{StaticResource BgInput}" Foreground="{StaticResource Error}" BorderThickness="0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <!-- Inspector: edit selected step -->
+                            <Border Margin="0,12,0,0" Padding="12" CornerRadius="6"
+                                    Background="{StaticResource BgTertiary}" BorderBrush="{StaticResource Border}" BorderThickness="1"
+                                    Visibility="{Binding IsInspectorVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel>
+                                    <TextBlock Text="Edit step" FontSize="12" FontWeight="SemiBold"
+                                              Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                                    <StackPanel Visibility="{Binding IsDelayStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <TextBlock Text="Delay (ms)" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                        <TextBox Text="{Binding SelectedStep.DelayMs, UpdateSourceTrigger=PropertyChanged}"
+                                                 Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                 Padding="8" Margin="0,0,0,0" FontSize="12"/>
+                                    </StackPanel>
+                                    <StackPanel Visibility="{Binding IsTextStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <TextBlock Text="Text" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                        <TextBox Text="{Binding SelectedStep.Text, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap" AcceptsReturn="True" Height="60"
+                                                 Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                 Padding="8" Margin="0,0,0,0" FontSize="12"/>
+                                    </StackPanel>
+                                    <StackPanel Visibility="{Binding IsKeyStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <TextBlock Text="Key" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                        <TextBox Text="{Binding SelectedStep.Key, UpdateSourceTrigger=PropertyChanged}"
+                                                 Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                 Padding="8" Margin="0,0,0,0" FontSize="12"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- URL and Application inputs -->
+                    <Border Background="{StaticResource BgSecondary}" CornerRadius="8" Padding="16" Margin="0,0,0,16"
+                            BorderBrush="{StaticResource Border}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Quick Actions" FontSize="14" FontWeight="SemiBold"
+                                      Foreground="{StaticResource TextPrimary}" Margin="0,0,0,12"/>
+                            
+                            <!-- URL Input -->
+                            <TextBlock Text="Open URL" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding UrlInput, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                         Padding="8" Margin="0,0,8,0" VerticalContentAlignment="Center"
+                                         FontSize="11"/>
+                                <ComboBox Grid.Column="1" SelectedItem="{Binding SelectedBrowser}" ItemsSource="{Binding Browsers}"
+                                          Width="100" Margin="0,0,8,0" Background="{StaticResource BgInput}"
+                                          Foreground="{StaticResource TextPrimary}" FontSize="11"/>
+                                <Button Grid.Column="2" Content="Add URL" Command="{Binding InsertUrlCommand}"
+                                        Padding="12,6" FontSize="11" Background="{StaticResource BrandBlue}"
+                                        Foreground="White" BorderThickness="0"/>
+                            </Grid>
+
+                            <!-- Application Path Input -->
+                            <TextBlock Text="Launch Application" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding ApplicationPathInput, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                         Padding="8" Margin="0,0,8,0" VerticalContentAlignment="Center"
+                                         FontSize="11"/>
+                                <Button Grid.Column="1" Content="Browse..." Command="{Binding BrowseApplicationCommand}"
+                                        Padding="12,6" Margin="0,0,8,0" FontSize="11" Background="{StaticResource BgTertiary}"
+                                        Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource Border}"
+                                        BorderThickness="1"/>
+                                <Button Grid.Column="2" Content="Add App" Command="{Binding InsertApplicationCommand}"
+                                        Padding="12,6" FontSize="11" Background="{StaticResource BrandBlue}"
+                                        Foreground="White" BorderThickness="0"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <TextBlock Text="Click a tag to append to selected slot, or drag onto a grid cell" FontSize="12"
                               Foreground="{StaticResource TextSecondary}" Margin="0,0,0,12"/>
                     <ItemsControl ItemsSource="{Binding AllTags}">

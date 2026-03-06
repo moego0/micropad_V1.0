@@ -62,16 +62,18 @@
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Profile List -->
-            <Border Grid.Column="0" Margin="0,0,12,0"
+            <Border Grid.Column="0" Margin="0,0,8,0"
                     Background="{StaticResource BgSecondary}"
                     BorderBrush="{StaticResource Border}" BorderThickness="1"
                     CornerRadius="8" Padding="16">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -84,7 +86,7 @@
                            HorizontalAlignment="Stretch" Margin="0,0,0,8"
                            BorderThickness="0" Cursor="Hand"/>
 
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,4">
                         <Button Content="Import" Command="{Binding ImportProfileCommand}"
                                 Background="{StaticResource BackgroundTertiary}"
                                 Foreground="{StaticResource TextPrimary}"
@@ -92,53 +94,189 @@
                         <Button Content="Export" Command="{Binding ExportProfileCommand}"
                                 Background="{StaticResource BackgroundTertiary}"
                                 Foreground="{StaticResource TextPrimary}"
-                                Padding="8,4" BorderThickness="0" Cursor="Hand"/>
+                                Padding="8,4" Margin="0,0,4,0" BorderThickness="0" Cursor="Hand"/>
                     </StackPanel>
+                    <WrapPanel Grid.Row="2" Margin="0,0,0,8">
+                        <Button Content="Duplicate" Command="{Binding DuplicateProfileCommand}"
+                                Background="Transparent" Foreground="{StaticResource TextSecondary}"
+                                Padding="6,4" Margin="0,0,4,4" BorderThickness="0" Cursor="Hand" FontSize="11"/>
+                        <Button Content="Rename" Command="{Binding RenameProfileCommand}"
+                                Background="Transparent" Foreground="{StaticResource TextSecondary}"
+                                Padding="6,4" Margin="0,0,4,4" BorderThickness="0" Cursor="Hand" FontSize="11"/>
+                        <Button Content="Delete local" Command="{Binding DeleteProfileLocalCommand}"
+                                Background="Transparent" Foreground="{StaticResource Error}"
+                                Padding="6,4" Margin="0,0,4,4" BorderThickness="0" Cursor="Hand" FontSize="11"/>
+                    </WrapPanel>
 
-                    <ListBox Grid.Row="2" ItemsSource="{Binding Profiles}" 
-                            SelectedItem="{Binding SelectedProfile}"
-                            Background="Transparent" BorderThickness="0"
-                            Foreground="{StaticResource TextPrimary}">
+                    <Grid Grid.Row="3">
+                        <ListBox ItemsSource="{Binding Profiles}" 
+                                SelectedItem="{Binding SelectedProfile}"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{StaticResource TextPrimary}"
+                                Visibility="{Binding IsProfilesLoading, Converter={StaticResource InverseBoolToVisibility}}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Id}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <!-- Skeleton loading placeholders -->
+                        <StackPanel Visibility="{Binding IsProfilesLoading, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Border Height="44" Background="{StaticResource BgTertiary}" CornerRadius="4" Margin="0,4"/>
+                            <Border Height="44" Background="{StaticResource BgTertiary}" CornerRadius="4" Margin="0,4"/>
+                            <Border Height="44" Background="{StaticResource BgTertiary}" CornerRadius="4" Margin="0,4"/>
+                            <Border Height="44" Background="{StaticResource BgTertiary}" CornerRadius="4" Margin="0,4"/>
+                            <Border Height="44" Background="{StaticResource BgTertiary}" CornerRadius="4" Margin="0,4"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Action Library -->
+            <Border Grid.Column="1" Margin="0,0,8,0" Background="{StaticResource BgSecondary}"
+                    BorderBrush="{StaticResource Border}" BorderThickness="1"
+                    CornerRadius="8" Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBox Grid.Row="0" Text="{Binding ActionSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                             Padding="8,6" Margin="0,0,0,8" BorderThickness="0"/>
+                    <ComboBox Grid.Row="1" ItemsSource="{Binding ActionCategories}"
+                              SelectedItem="{Binding SelectedActionCategory}" Margin="0,0,0,8"
+                              Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                              Padding="8,6"/>
+                    <Grid Grid.Row="2">
+                        <ListBox ItemsSource="{Binding FilteredActionLibrary}"
+                                 Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextPrimary}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Id}" FontWeight="Bold" Margin="0,0,10,0"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                                </Grid>
+                                <Border Background="{StaticResource BgTertiary}" CornerRadius="6" Padding="8,6" Margin="0,2"
+                                        MouseLeftButtonDown="ActionCard_PreviewMouseLeftButtonDown">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"/>
+                                            <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextTertiary}" FontSize="11"
+                                                      TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding Badge}" Foreground="{StaticResource AccentPrimary}" FontSize="10" Margin="0,2,0,0"
+                                                      Visibility="{Binding Badge, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="★" Command="{Binding DataContext.ToggleActionFavoriteCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                CommandParameter="{Binding}" Background="Transparent" Foreground="{StaticResource TextTertiary}"
+                                                Padding="4,0" BorderThickness="0" Cursor="Hand"/>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
-                    </ListBox>
+                        </ListBox>
+                        <TextBlock Text="No actions found. Try searching for 'volume' or 'copy'."
+                                   Foreground="{StaticResource TextTertiary}" FontSize="12" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center" Margin="12"
+                                   Visibility="{Binding IsActionLibraryEmpty, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    </Grid>
                 </Grid>
             </Border>
 
             <!-- Profile Details + Key Grid -->
-            <Border Grid.Column="1" Background="{StaticResource BgSecondary}"
+            <Border Grid.Column="2" Background="{StaticResource BgSecondary}"
                     BorderBrush="{StaticResource Border}" BorderThickness="1"
                     CornerRadius="8" Padding="24">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <!-- Empty state: no profile selected -->
+                    <Border Visibility="{Binding EditingProfile, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Inverse}">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
+                            <TextBlock Text="Select a profile" Style="{StaticResource TitleText}"
+                                      Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Text="Choose a profile from the list to edit keys, or create / import one to get started."
+                                      Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" TextAlignment="Center"
+                                      MaxWidth="320" Margin="0,0,0,20"/>
+                            <Button Content="Create profile" Command="{Binding CreateProfileCommand}"
+                                    Background="{StaticResource AccentPrimary}" Foreground="White"
+                                    Padding="16,10" HorizontalAlignment="Center" Cursor="Hand" BorderThickness="0"/>
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding EditingProfile, Converter={StaticResource NullToVisibilityConverter}}">
                     <StackPanel>
                         <TextBlock Text="{Binding EditingProfile.Name, FallbackValue=Select a profile}" 
                                   FontSize="20" FontWeight="Bold" 
-                                  Foreground="{StaticResource TextPrimary}" Margin="0,0,0,15"/>
+                                  Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding DeviceCapacityText}" FontSize="12"
+                                  Foreground="{StaticResource TextTertiary}" Margin="0,0,0,15"/>
 
                         <!-- Toolbar -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
                             <Button Content="Activate on device" Command="{Binding ActivateProfileCommand}"
                                     Background="{StaticResource Success}" Foreground="White"
                                     Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"/>
+                            <Button Content="Pull from device" Command="{Binding PullFromDeviceCommand}"
+                                    Background="{StaticResource BgTertiary}" Foreground="{StaticResource TextPrimary}"
+                                    Padding="12,6" Margin="0,0,8,0" BorderThickness="1" BorderBrush="{StaticResource Border}" Cursor="Hand"/>
                             <Button Content="Push to device" Command="{Binding PushToDeviceCommand}"
                                     Background="{StaticResource AccentBlue}" Foreground="White"
-                                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"/>
+                                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"
+                                    IsEnabled="{Binding IsPushInProgress, Converter={StaticResource InverseBoolConverter}}"/>
+                            <Border Visibility="{Binding IsPushInProgress, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Background="{StaticResource BgTertiary}" CornerRadius="6" Padding="12,6" Margin="0,0,0,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding PushStepText}" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                            </Border>
                             <Button Content="Save locally" Command="{Binding SaveLocallyCommand}"
                                     Background="{StaticResource BackgroundTertiary}"
                                     Foreground="{StaticResource TextPrimary}"
+                                    Padding="12,6" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand"/>
+                            <Button Content="Delete from device" Command="{Binding DeleteFromDeviceCommand}"
+                                    Background="{StaticResource Error}" Foreground="White"
                                     Padding="12,6" BorderThickness="0" Cursor="Hand"/>
                         </StackPanel>
 
+                        <!-- Layer tabs + Fn live indicator -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <TextBlock Text="Layer:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}" Margin="0,0,10,0"/>
+                            <RadioButton Content="Layer 0 (Base)" GroupName="Layer" Margin="0,0,16,0" Foreground="{StaticResource TextPrimary}"
+                                         IsChecked="{Binding SelectedLayerIndex, Converter={StaticResource IntToBoolConverter}, ConverterParameter=0, Mode=TwoWay}"/>
+                            <RadioButton Content="Layer 1 (Fn1)" GroupName="Layer" Margin="0,0,16,0" Foreground="{StaticResource TextPrimary}"
+                                         IsChecked="{Binding SelectedLayerIndex, Converter={StaticResource IntToBoolConverter}, ConverterParameter=1, Mode=TwoWay}"/>
+                            <RadioButton Content="Layer 2 (Fn2)" GroupName="Layer" Margin="0,0,12,0" Foreground="{StaticResource TextPrimary}"
+                                         IsChecked="{Binding SelectedLayerIndex, Converter={StaticResource IntToBoolConverter}, ConverterParameter=2, Mode=TwoWay}"/>
+                            <Border Background="{StaticResource AccentPrimary}" CornerRadius="10" Padding="8,4" Margin="0,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding LiveLayerIndex, Converter={StaticResource NullToVisibilityConverter}}">
+                                <TextBlock Foreground="White" FontSize="11">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Fn active"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LiveLayerIndex}" Value="1">
+                                                    <Setter Property="Text" Value="Layer 1 active"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding LiveLayerIndex}" Value="2">
+                                                    <Setter Property="Text" Value="Layer 2 active"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding LiveLayerIndex}" Value="0">
+                                                    <Setter Property="Text" Value="Base layer"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
                         <!-- 3x4 Key Grid (8px spacing, shadow, rounded) -->
                         <TextBlock Text="Keys (click to assign action)" FontSize="14" FontWeight="SemiBold"
                                   Foreground="{StaticResource TextPrimary}" Margin="0,0,0,12"/>
@@ -163,8 +301,10 @@
 
                             <!-- Row 0 -->
                             <Button Grid.Row="0" Grid.Column="0" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=0}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=0;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="0">
+                                    CommandParameter="0" Tag="0" AllowDrop="True" Drop="KeySlot_Drop">
                                 <Button.Content>
                                     <StackPanel>
                                         <TextBlock Text="K1" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
@@ -175,8 +315,10 @@
                                 </Button.Content>
                             </Button>
                             <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=1}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=1;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="1">
+                                    CommandParameter="1" Tag="1" AllowDrop="True" Drop="KeySlot_Drop">
                                 <Button.Content>
                                     <StackPanel>
                                         <TextBlock Text="K2" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
@@ -187,8 +329,10 @@
                                 </Button.Content>
                             </Button>
                             <Button Grid.Row="0" Grid.Column="4" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=2}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=2;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="2">
+                                    CommandParameter="2" Tag="2" AllowDrop="True" Drop="KeySlot_Drop">
                                 <Button.Content>
                                     <StackPanel>
                                         <TextBlock Text="K3" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
@@ -199,8 +343,10 @@
                                 </Button.Content>
                             </Button>
                             <Button Grid.Row="0" Grid.Column="6" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=3}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=3;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="3">
+                                    CommandParameter="3" Tag="3" AllowDrop="True" Drop="KeySlot_Drop">
                                 <Button.Content>
                                     <StackPanel>
                                         <TextBlock Text="K4" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
@@ -212,8 +358,10 @@
                             </Button>
                             <!-- Row 1 -->
                             <Button Grid.Row="2" Grid.Column="0" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=4}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=4;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="4">
+                                    CommandParameter="4" Tag="4" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K5" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[4].DisplayName, FallbackValue=Not set}" 
@@ -222,8 +370,10 @@
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="2" Grid.Column="2" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=5}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=5;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="5">
+                                    CommandParameter="5" Tag="5" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K6" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[5].DisplayName, FallbackValue=Not set}" 
@@ -232,8 +382,10 @@
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="2" Grid.Column="4" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=6}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=6;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="6">
+                                    CommandParameter="6" Tag="6" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K7" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[6].DisplayName, FallbackValue=Not set}" 
@@ -242,8 +394,10 @@
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="2" Grid.Column="6" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=7}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=7;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="7">
+                                    CommandParameter="7" Tag="7" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K8" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[7].DisplayName, FallbackValue=Not set}" 
@@ -253,8 +407,10 @@
                             </Button>
                             <!-- Row 2 -->
                             <Button Grid.Row="4" Grid.Column="0" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=8}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=8;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="8">
+                                    CommandParameter="8" Tag="8" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K9" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[8].DisplayName, FallbackValue=Not set}" 
@@ -263,8 +419,10 @@
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="4" Grid.Column="2" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=9}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=9;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="9">
+                                    CommandParameter="9" Tag="9" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K10" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[9].DisplayName, FallbackValue=Not set}" 
@@ -273,8 +431,10 @@
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="4" Grid.Column="4" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=10}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=10;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="10">
+                                    CommandParameter="10" Tag="10" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K11" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[10].DisplayName, FallbackValue=Not set}" 
@@ -283,8 +443,10 @@
                                 </StackPanel>
                             </Button>
                             <Button Grid.Row="4" Grid.Column="6" Style="{StaticResource KeyGridButtonStyle}"
+                                    Background="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=11}"
+                                    BorderBrush="{Binding SelectedKeySlotIndex, Converter={StaticResource SlotSelectedToBrushConverter}, ConverterParameter=11;border}"
                                     Command="{Binding EditKeyCommand}"
-                                    CommandParameter="11">
+                                    CommandParameter="11" Tag="11" AllowDrop="True" Drop="KeySlot_Drop">
                                 <StackPanel>
                                     <TextBlock Text="K12" FontSize="10" Foreground="{StaticResource TextSecondary}"/>
                                     <TextBlock Text="{Binding KeySlots[11].DisplayName, FallbackValue=Not set}" 
@@ -296,13 +458,94 @@
 
                         <TextBlock Text="Encoders" FontSize="14" FontWeight="Bold" 
                                   Foreground="{StaticResource TextPrimary}" Margin="0,10,0,5"/>
-                        <TextBlock Text="Encoder actions can be edited in a future update." 
-                                  Foreground="{StaticResource TextSecondary}" Margin="0,0,0,10"/>
+                        <TextBlock Text="Mode A/B/C: encoder press cycles. Apply a preset or edit in firmware." 
+                                  Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,8"/>
+                        <ItemsControl ItemsSource="{Binding EditingProfile.Encoders}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource BgTertiary}" CornerRadius="6" Padding="10,8" Margin="0,4">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}">
+                                                <Run Text="Encoder "/>
+                                                <Run Text="{Binding Index, Mode=OneWay}"/>
+                                            </TextBlock>
+                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                <TextBlock Text="Preset:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}" Margin="0,0,8,0"/>
+                                                <Button Content="Volume" Command="{Binding DataContext.ApplyEncoderPresetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding Index, StringFormat={}{0}:Volume}"
+                                                        Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                        Padding="8,4" Margin="0,0,4,0" BorderThickness="0" Cursor="Hand"/>
+                                                <Button Content="Scroll" Command="{Binding DataContext.ApplyEncoderPresetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding Index, StringFormat={}{0}:Scroll}"
+                                                        Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                        Padding="8,4" Margin="0,0,4,0" BorderThickness="0" Cursor="Hand"/>
+                                                <Button Content="Zoom" Command="{Binding DataContext.ApplyEncoderPresetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding Index, StringFormat={}{0}:Zoom}"
+                                                        Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                        Padding="8,4" Margin="0,0,4,0" BorderThickness="0" Cursor="Hand"/>
+                                                <Button Content="Media" Command="{Binding DataContext.ApplyEncoderPresetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding Index, StringFormat={}{0}:Media}"
+                                                        Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                        Padding="8,4" Margin="0,0,4,0" BorderThickness="0" Cursor="Hand"/>
+                                                <Button Content="None" Command="{Binding DataContext.ApplyEncoderPresetCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding Index, StringFormat={}{0}:None}"
+                                                        Background="{StaticResource BgInput}" Foreground="{StaticResource TextPrimary}"
+                                                        Padding="8,4" BorderThickness="0" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Combos (chord)" FontSize="14" FontWeight="Bold" 
+                                  Foreground="{StaticResource TextPrimary}" Margin="0,10,0,5"/>
+                        <TextBlock Text="Two keys pressed together trigger an action. Add a combo then edit to pick the keys."
+                                  Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Add combo" Command="{Binding AddComboCommand}"
+                                    Background="{StaticResource AccentPrimary}" Foreground="White"
+                                    Padding="10,6" BorderThickness="0" Cursor="Hand"/>
+                        </StackPanel>
+                        <Grid>
+                            <ItemsControl ItemsSource="{Binding ComboList}"
+                                          Visibility="{Binding IsComboListEmpty, Converter={StaticResource InverseBoolToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Display}" VerticalAlignment="Center"
+                                                      Foreground="{StaticResource TextPrimary}" Margin="0,0,12,0"/>
+                                            <Button Grid.Column="2" Content="Edit keys" Command="{Binding DataContext.EditComboCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}" Background="{StaticResource BgTertiary}" Foreground="{StaticResource TextPrimary}"
+                                                    Padding="6,2" Margin="0,0,4,0" BorderThickness="0" Cursor="Hand"/>
+                                            <Button Grid.Column="3" Content="Remove" Command="{Binding DataContext.RemoveComboCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                    CommandParameter="{Binding}" Background="Transparent" Foreground="{StaticResource Error}"
+                                                    Padding="6,2" BorderThickness="0" Cursor="Hand"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Visibility="{Binding IsComboListEmpty, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Background="{StaticResource BgTertiary}" CornerRadius="6" Padding="16,12" Margin="0,4,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Combos let two keys trigger a new action." Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Click “Add combo” then “Edit keys” to choose which keys form the chord." 
+                                              Foreground="{StaticResource TextTertiary}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
 
                         <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondary}" 
                                   Margin="0,10,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </ScrollViewer>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

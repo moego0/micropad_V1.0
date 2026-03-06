@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>
 #include "config.h"
 #include "profile.h"
 #include "profile_storage.h"
@@ -17,6 +18,7 @@ public:
     // Profile management
     bool loadProfile(uint8_t id);
     bool saveProfile(uint8_t id, const Profile& profile);
+    bool saveProfileFromJson(JsonObjectConst obj);
     bool deleteProfile(uint8_t id);
     bool setActiveProfile(uint8_t id);
     
@@ -29,6 +31,10 @@ public:
     uint8_t getProfileCount();
     bool getProfileInfo(uint8_t id, char* name, size_t* size);
     bool loadProfileById(uint8_t id, Profile& profile);
+    
+    // Storage capacity (for GET_CAPS)
+    size_t getFreeSpace();
+    size_t getTotalSpace();
     
     // Factory reset
     void factoryReset();

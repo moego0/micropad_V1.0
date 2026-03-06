@@ -52,6 +52,9 @@ void ProtocolHandler::handleMessage(const String& json) {
     if (cmd == "getDeviceInfo") {
         handleGetDeviceInfo(id);
     }
+    else if (cmd == "getCaps") {
+        handleGetCaps(id);
+    }
     else if (cmd == "listProfiles") {
         handleListProfiles(id);
     }
@@ -65,6 +68,13 @@ void ProtocolHandler::handleMessage(const String& json) {
     else if (cmd == "setActiveProfile") {
         uint8_t profileId = doc["profileId"] | 0;
         handleSetActiveProfile(id, profileId);
+    }
+    else if (cmd == "getActiveProfile") {
+        handleGetActiveProfile(id);
+    }
+    else if (cmd == "deleteProfile") {
+        uint8_t profileId = doc["profileId"] | 0;
+        handleDeleteProfile(id, profileId);
     }
     else if (cmd == "getStats") {
         handleGetStats(id);
@@ -91,12 +101,23 @@ void ProtocolHandler::handleGetDeviceInfo(uint32_t requestId) {
     
     JsonArray caps = payload.createNestedArray("capabilities");
     caps.add("ble");
-    caps.add("wifi");
-    caps.add("macros");
     caps.add("profiles");
+    caps.add("encoders");
     
     payload["uptime"] = millis() / 1000;
     payload["freeHeap"] = ESP.getFreeHeap();
+    
+    sendResponse(requestId, payload);
+}
+
+void ProtocolHandler::handleGetCaps(uint32_t requestId) {
+    DynamicJsonDocument payload(512);
+    
+    payload["maxProfiles"] = MAX_PROFILES;
+    payload["freeBytes"] = _profileManager->getFreeSpace();
+    payload["supportsLayers"] = false;   // Future
+    payload["supportsMacros"] = false;  // Macros on PC, embed on push
+    payload["supportsEncoders"] = true;
     
     sendResponse(requestId, payload);
 }
@@ -181,23 +202,50 @@ void ProtocolHandler::handleGetProfile(uint32_t requestId, uint8_t profileId) {
 }
 
 void ProtocolHandler::handleSetProfile(uint32_t requestId, const JsonDocument& doc) {
-    // This would deserialize and save a profile
-    // For now, just acknowledge
-    sendResponse(requestId, false, "Not implemented yet");
+    JsonObjectConst profileObj = doc["profile"].as<JsonObjectConst>();
+    if (profileObj.isNull()) {
+        sendResponse(requestId, false, "Missing profile");
+        return;
+    }
+    if (_profileManager->saveProfileFromJson(profileObj)) {
+        DynamicJsonDocument payload(64);
+        payload["success"] = true;
+        sendResponse(requestId, payload);
+    } else {
+        sendResponse(requestId, false, "Invalid profile or save failed");
+    }
 }
 
 void ProtocolHandler::handleSetActiveProfile(uint32_t requestId, uint8_t profileId) {
     if (_profileManager->setActiveProfile(profileId)) {
         DynamicJsonDocument payload(128);
         payload["profileId"] = profileId;
+        payload["success"] = true;
         sendResponse(requestId, payload);
         
-        // Send event
+        // Send event (EVENT_ACTIVE_PROFILE_CHANGED)
         DynamicJsonDocument eventPayload(128);
         eventPayload["profileId"] = profileId;
         sendEvent("profileChanged", eventPayload);
     } else {
         sendResponse(requestId, false, "Failed to switch profile");
+    }
+}
+
+void ProtocolHandler::handleGetActiveProfile(uint32_t requestId) {
+    uint8_t id = _profileManager->getActiveProfileId();
+    DynamicJsonDocument payload(128);
+    payload["profileId"] = id;
+    sendResponse(requestId, payload);
+}
+
+void ProtocolHandler::handleDeleteProfile(uint32_t requestId, uint8_t profileId) {
+    if (_profileManager->deleteProfile(profileId)) {
+        DynamicJsonDocument payload(64);
+        payload["success"] = true;
+        sendResponse(requestId, payload);
+    } else {
+        sendResponse(requestId, false, "Cannot delete profile (active or last)");
     }
 }
 

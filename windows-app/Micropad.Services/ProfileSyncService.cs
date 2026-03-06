@@ -65,6 +65,11 @@ public class ProfileSyncService
         _localStorage.SaveProfile(profile);
     }
 
+    public void DeleteProfileLocally(int profileId)
+    {
+        _localStorage.DeleteProfile(profileId);
+    }
+
     public Profile? LoadProfileLocally(int profileId)
     {
         return _localStorage.LoadProfile(profileId);
@@ -83,5 +88,23 @@ public class ProfileSyncService
     public Profile? ImportProfileFromFile(string filePath)
     {
         return _localStorage.ImportProfile(filePath);
+    }
+
+    public async Task<int?> GetActiveProfileIdAsync()
+    {
+        if (!_connection.IsConnected) return null;
+        return await _protocol.GetActiveProfileAsync();
+    }
+
+    public async Task<DeviceCaps?> GetCapsAsync()
+    {
+        if (!_connection.IsConnected) return null;
+        return await _protocol.GetCapsAsync();
+    }
+
+    public async Task<bool> DeleteProfileFromDeviceAsync(int profileId)
+    {
+        if (!_connection.IsConnected) return false;
+        return await _protocol.DeleteProfileAsync(profileId);
     }
 }

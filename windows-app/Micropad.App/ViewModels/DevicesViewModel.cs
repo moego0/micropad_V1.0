@@ -21,6 +21,8 @@ public partial class DevicesViewModel : ObservableObject
     private readonly IDeviceConnection _connection;
     private readonly ProtocolHandler _protocol;
     private readonly Micropad.Services.Storage.SettingsStorage _settingsStorage;
+    private readonly Micropad.Services.DiagnosticsService _diagnosticsService;
+    private readonly Micropad.App.Services.SetupJourneyService _setupJourney;
     private BluetoothLEAdvertisementWatcher? _watcher;
 
     [ObservableProperty]
@@ -41,25 +43,81 @@ public partial class DevicesViewModel : ObservableObject
     [ObservableProperty]
     private string _deviceInfo = "Select a device to view info";
 
+    [ObservableProperty]
+    private string _connectionStateText = "Idle";
+
+    [ObservableProperty]
+    private string _exportDiagnosticsResult = "";
+
     private readonly MainViewModel _mainViewModel;
 
-    public DevicesViewModel(IDeviceConnection connection, ProtocolHandler protocol, MainViewModel mainViewModel, Micropad.Services.Storage.SettingsStorage settingsStorage)
+    public DevicesViewModel(IDeviceConnection connection, ProtocolHandler protocol, MainViewModel mainViewModel, Micropad.Services.Storage.SettingsStorage settingsStorage, Micropad.Services.DiagnosticsService diagnosticsService, Micropad.App.Services.SetupJourneyService setupJourney)
     {
         _connection = connection;
         _protocol = protocol;
         _mainViewModel = mainViewModel;
         _settingsStorage = settingsStorage;
+        _diagnosticsService = diagnosticsService;
+        _setupJourney = setupJourney;
         _connection.Disconnected += (_, _) =>
         {
-            App.Current.Dispatcher.Invoke(() => IsConnected = false);
+            App.Current.Dispatcher.Invoke(() => { IsConnected = false; UpdateConnectionStateText(); });
         };
         _connection.Connected += (_, _) =>
         {
-            App.Current.Dispatcher.Invoke(() => IsConnected = true);
+            App.Current.Dispatcher.Invoke(() => { IsConnected = true; UpdateConnectionStateText(); });
         };
-        // Reflect actual connection state (e.g. already connected from startup auto-connect)
+        _connection.ConnectionStateChanged += (_, _) =>
+        {
+            App.Current.Dispatcher.Invoke(UpdateConnectionStateText);
+        };
         IsConnected = _connection.IsConnected;
+        UpdateConnectionStateText();
+        _setupJourney.Refresh();
+        _setupJourney.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Micropad.App.Services.SetupJourneyService.IsGettingStartedVisible))
+                OnPropertyChanged(nameof(IsGettingStartedVisible));
+        };
         _ = LoadPairedDevicesAsync();
+    }
+
+    public Micropad.App.Services.SetupJourneyService SetupJourney => _setupJourney;
+
+    public bool IsGettingStartedVisible => _setupJourney.IsGettingStartedVisible;
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void DismissGettingStarted()
+    {
+        _setupJourney.DismissGettingStarted(dontShowAgain: true);
+        OnPropertyChanged(nameof(IsGettingStartedVisible));
+    }
+
+    /// <summary>Stepper: 0=Idle, 1=Scanning, 2=Pairing/Connecting, 3=Ready. For connection journey UI.</summary>
+    public int ConnectionStepIndex => _connection.State switch
+    {
+        ConnectionState.Scanning => 1,
+        ConnectionState.Pairing => 2,
+        ConnectionState.Connecting => 2,
+        ConnectionState.Reconnecting => 2,
+        ConnectionState.Ready => 3,
+        _ => 0
+    };
+
+    private void UpdateConnectionStateText()
+    {
+        ConnectionStateText = _connection.State switch
+        {
+            ConnectionState.Idle => "Idle",
+            ConnectionState.Scanning => "Scanning",
+            ConnectionState.Pairing => "Pairing",
+            ConnectionState.Connecting => "Connecting",
+            ConnectionState.Ready => "Ready",
+            ConnectionState.Reconnecting => "Reconnecting",
+            ConnectionState.Error => $"Error: {_connection.LastError ?? "Unknown"}",
+            _ => _connection.State.ToString()
+        };
+        OnPropertyChanged(nameof(ConnectionStepIndex));
     }
 
     /// <summary>Load already-paired BLE devices so Micropad appears even when connected to PC (not advertising).</summary>
@@ -238,6 +296,43 @@ public partial class DevicesViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusText = $"Disconnect failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>Fix connection: disconnect cleanly, stop watcher, then ready to scan and reconnect.</summary>
+    [RelayCommand]
+    private async Task FixConnectionAsync()
+    {
+        try
+        {
+            _watcher?.Stop();
+            _watcher = null;
+            IsScanning = false;
+            await _connection.DisconnectAsync();
+            IsConnected = false;
+            DeviceInfo = "Select a device to view info";
+            StatusText = "Disconnected. Click Scan for Devices, then select a device and Connect.";
+            ExportDiagnosticsResult = "";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Fix connection: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportDiagnosticsAsync()
+    {
+        try
+        {
+            ExportDiagnosticsResult = "Exporting...";
+            var path = await _diagnosticsService.ExportDiagnosticsAsync();
+            ExportDiagnosticsResult = $"Saved: {path}";
+            StatusText = "Diagnostics exported.";
+        }
+        catch (Exception ex)
+        {
+            ExportDiagnosticsResult = $"Error: {ex.Message}";
         }
     }
 }

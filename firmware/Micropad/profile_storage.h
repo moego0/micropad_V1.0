@@ -32,6 +32,9 @@ public:
     size_t getUsedSpace();
     size_t getFreeSpace();
     
+    // Deserialize profile from JSON object (e.g. from protocol request)
+    bool deserializeProfileFromObject(JsonObjectConst obj, Profile& profile);
+    
 private:
     bool _initialized;
     

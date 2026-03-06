@@ -42,6 +42,10 @@ public class SettingsStorage
         {
             var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
             File.WriteAllText(_settingsPath, json);
+            SettingsSaved?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>Raised after Save(); e.g. MainWindow can re-apply backdrop.</summary>
+    public event EventHandler? SettingsSaved;
 }

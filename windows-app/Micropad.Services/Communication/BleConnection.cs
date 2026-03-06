@@ -25,6 +25,8 @@ public class BleConnection : IDeviceConnection
     private bool _autoReconnect;
     private CancellationTokenSource? _reconnectCts;
     private readonly object _connectionLock = new();
+    private ConnectionState _state = ConnectionState.Idle;
+    private string? _lastError;
 
     /// <summary>When true, attempt to reconnect with exponential backoff after disconnect (e.g. when connection drops).</summary>
     public bool AutoReconnect
@@ -35,10 +37,20 @@ public class BleConnection : IDeviceConnection
 
     public bool IsConnected => _device != null && _device.ConnectionStatus == BluetoothConnectionStatus.Connected;
     public string DeviceName => _device?.Name ?? string.Empty;
+    public ConnectionState State => _state;
+    public string? LastError => _lastError;
 
     public event EventHandler<string>? MessageReceived;
     public event EventHandler? Connected;
     public event EventHandler? Disconnected;
+    public event EventHandler? ConnectionStateChanged;
+
+    private void SetState(ConnectionState state, string? error = null)
+    {
+        _state = state;
+        _lastError = error;
+        ConnectionStateChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public async Task<bool> ConnectAsync(string deviceId)
     {
@@ -48,27 +60,32 @@ public class BleConnection : IDeviceConnection
             _reconnectCts?.Cancel();
             _reconnectCts = null;
         }
+        SetState(ConnectionState.Connecting);
 
         try
         {
             _device = await BluetoothLEDevice.FromIdAsync(deviceId);
             if (_device == null)
             {
+                SetState(ConnectionState.Error, "FromIdAsync returned null");
                 throw new InvalidOperationException(
                     "Could not open the device (FromIdAsync returned null). Remove Micropad from Settings → Bluetooth → Remove device, then power-cycle the Micropad and try again.");
             }
 
             if (!_device.DeviceInformation.Pairing.IsPaired)
             {
+                SetState(ConnectionState.Pairing);
                 var pairingResult = await PairWithFallbackAsync();
                 if (pairingResult.Status != DevicePairingResultStatus.Paired &&
                     pairingResult.Status != DevicePairingResultStatus.AlreadyPaired)
                 {
                     DisposeConnectionHandles();
+                    SetState(ConnectionState.Error, $"Pairing: {pairingResult.Status}");
                     throw new InvalidOperationException(
                         $"Pairing failed: {pairingResult.Status}. Remove device from Bluetooth settings, power-cycle Micropad, then try Connect again.");
                 }
                 Trace.WriteLine($"[BLE] Pairing result: {pairingResult.Status}");
+                SetState(ConnectionState.Connecting);
             }
 
             await Task.Delay(500);
@@ -95,6 +112,7 @@ public class BleConnection : IDeviceConnection
                 var err = servicesResult.Status == GattCommunicationStatus.Unreachable
                     ? "Unreachable (device may be connected as HID only). Remove from Bluetooth, power-cycle Micropad, then Connect."
                     : $"{servicesResult.Status}. Try: remove Micropad from Bluetooth, power-cycle device, then Connect.";
+                SetState(ConnectionState.Error, err);
                 throw new InvalidOperationException($"GATT services error: {err}");
             }
 
@@ -107,6 +125,7 @@ public class BleConnection : IDeviceConnection
             {
                 DisposeConnectionHandles();
                 var listed = string.Join(", ", serviceList);
+                SetState(ConnectionState.Error, "Config service not found");
                 throw new InvalidOperationException(
                     "Device does not expose the Micropad config service. Check firmware. Discovered service UUIDs: " + listed);
             }
@@ -116,6 +135,7 @@ public class BleConnection : IDeviceConnection
             if (cmdResult.Status != GattCommunicationStatus.Success || cmdResult.Characteristics.Count == 0)
             {
                 DisposeConnectionHandles();
+                SetState(ConnectionState.Error, "CMD char not found");
                 throw new InvalidOperationException("Config CMD characteristic not found. Reflash the Micropad firmware.");
             }
             _cmdChar = cmdResult.Characteristics[0];
@@ -124,23 +144,32 @@ public class BleConnection : IDeviceConnection
             if (evtResult.Status != GattCommunicationStatus.Success || evtResult.Characteristics.Count == 0)
             {
                 DisposeConnectionHandles();
+                SetState(ConnectionState.Error, "EVT char not found");
                 throw new InvalidOperationException("Config EVT characteristic not found. Reflash the Micropad firmware.");
             }
             _evtChar = evtResult.Characteristics[0];
 
+            // Subscribe to EVT notifications (re-subscribe on every connect/reconnect)
             var cccdValue = GattClientCharacteristicConfigurationDescriptorValue.Notify;
             await _evtChar.WriteClientCharacteristicConfigurationDescriptorAsync(cccdValue);
             _evtChar.ValueChanged += OnValueChanged;
 
             _device.ConnectionStatusChanged += OnConnectionStatusChanged;
 
+            SetState(ConnectionState.Ready);
             Connected?.Invoke(this, EventArgs.Empty);
             return true;
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
             DisposeConnectionHandles();
+            SetState(ConnectionState.Error, ex.Message);
             throw new InvalidOperationException($"{ex.GetType().Name}: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            SetState(ConnectionState.Error, ex.Message);
+            throw;
         }
     }
 
@@ -191,6 +220,7 @@ public class BleConnection : IDeviceConnection
         if (_evtChar != null)
             _evtChar.ValueChanged -= OnValueChanged;
         DisposeConnectionHandles();
+        SetState(ConnectionState.Idle);
         Disconnected?.Invoke(this, EventArgs.Empty);
         await Task.CompletedTask;
     }
@@ -200,10 +230,12 @@ public class BleConnection : IDeviceConnection
         if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
         {
             DisposeConnectionHandles();
+            SetState(ConnectionState.Idle);
             Disconnected?.Invoke(this, EventArgs.Empty);
 
             if (_autoReconnect && !string.IsNullOrEmpty(_lastDeviceId))
             {
+                SetState(ConnectionState.Reconnecting);
                 _ = TryAutoReconnectAsync();
             }
         }
@@ -228,19 +260,22 @@ public class BleConnection : IDeviceConnection
             if (cts.Token.IsCancellationRequested) return;
 
             var deviceId = _lastDeviceId;
-            if (string.IsNullOrEmpty(deviceId)) return;
+            if (string.IsNullOrEmpty(deviceId)) { SetState(ConnectionState.Idle); return; }
 
             try
             {
+                SetState(ConnectionState.Reconnecting);
                 Trace.WriteLine($"[BLE] Auto-reconnect attempt {attempt}");
                 await ConnectAsync(deviceId).ConfigureAwait(false);
                 return;
             }
             catch
             {
+                SetState(ConnectionState.Reconnecting);
                 delayMs = Math.Min(delayMs * 2, maxDelayMs);
             }
         }
+        SetState(ConnectionState.Idle);
     }
 
     public async Task SendMessageAsync(string json)

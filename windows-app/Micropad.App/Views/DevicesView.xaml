@@ -7,12 +7,14 @@
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Header (richer: accent underline) -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
             <TextBlock Text="Bluetooth Devices" FontSize="24" FontWeight="Bold" 
                       Foreground="{StaticResource TextPrimary}"/>
             <Border Height="3" Width="48" CornerRadius="2" Margin="0,6,0,0"
@@ -21,8 +23,156 @@
                       Foreground="{StaticResource TextSecondary}" Margin="0,10,0,0"/>
         </StackPanel>
 
+        <!-- Setup Journey (Getting started) - can be dismissed with X or "Don't show again" -->
+        <Border Grid.Row="1" Background="{StaticResource BackgroundSecondary}" CornerRadius="8" Padding="16,12" Margin="0,0,0,12"
+                Visibility="{Binding IsGettingStartedVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Getting started" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="Don&#x2019;t show again" Command="{Binding DismissGettingStartedCommand}"
+                                Padding="8,4" FontSize="11" Background="Transparent" Foreground="{StaticResource TextTertiary}"
+                                BorderThickness="0" ToolTip="Hide this panel permanently"
+                                VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Button Content="✕" Command="{Binding DismissGettingStartedCommand}"
+                                Padding="6,2" FontSize="12" Background="Transparent" Foreground="{StaticResource TextSecondary}"
+                                BorderThickness="0" ToolTip="Close"
+                                VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding SetupJourney.Steps}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" FontSize="14" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="○"/>
+                                            <Setter Property="Foreground" Value="{StaticResource TextTertiary}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsComplete}" Value="True">
+                                                    <Setter Property="Text" Value="✓"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Success}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" FontSize="12">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsComplete}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextTertiary}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Connection journey stepper -->
+        <Border Grid.Row="2" Background="{StaticResource BackgroundSecondary}" CornerRadius="8" Padding="16,12" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                    <Ellipse Width="28" Height="28" HorizontalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource BgTertiary}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="1">
+                                        <Setter Property="Fill" Value="{StaticResource AccentPrimary}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="2">
+                                        <Setter Property="Fill" Value="{StaticResource AccentPrimary}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="3">
+                                        <Setter Property="Fill" Value="{StaticResource AccentPrimary}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="Scan" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Rectangle Grid.Column="1" Width="24" Height="2" VerticalAlignment="Center" Fill="{StaticResource BorderColor}"/>
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <Ellipse Width="28" Height="28" HorizontalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource BgTertiary}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="2">
+                                        <Setter Property="Fill" Value="{StaticResource AccentPrimary}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="3">
+                                        <Setter Property="Fill" Value="{StaticResource AccentPrimary}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="Found" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Rectangle Grid.Column="3" Width="24" Height="2" VerticalAlignment="Center" Fill="{StaticResource BorderColor}"/>
+                <StackPanel Grid.Column="4" HorizontalAlignment="Center">
+                    <Ellipse Width="28" Height="28" HorizontalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource BgTertiary}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="3">
+                                        <Setter Property="Fill" Value="{StaticResource AccentPrimary}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="Pairing" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Rectangle Grid.Column="5" Width="24" Height="2" VerticalAlignment="Center" Fill="{StaticResource BorderColor}"/>
+                <StackPanel Grid.Column="6" HorizontalAlignment="Center">
+                    <Ellipse Width="28" Height="28" HorizontalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource BgTertiary}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ConnectionStepIndex}" Value="3">
+                                        <Setter Property="Fill" Value="{StaticResource Success}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="Ready" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Content -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="300"/>
@@ -84,6 +234,9 @@
                     <TextBlock Text="{Binding DeviceInfo}" TextWrapping="Wrap" LineHeight="20"
                               Foreground="{StaticResource TextSecondary}"/>
 
+                    <TextBlock Text="{Binding ConnectionStateText}" Margin="0,10,0,0"
+                              Foreground="{StaticResource TextTertiary}" FontSize="12"/>
+
                     <StackPanel Margin="0,20,0,0">
                         <Button Content="Connect" 
                                Command="{Binding ConnectCommand}"
@@ -95,14 +248,27 @@
                                Command="{Binding DisconnectCommand}"
                                Background="#DC3545" Foreground="White"
                                Padding="15,8" BorderThickness="0"
-                               Cursor="Hand"/>
+                               Cursor="Hand" Margin="0,0,0,10"/>
+
+                        <Button Content="Fix Connection" 
+                               Command="{Binding FixConnectionCommand}"
+                               Background="#6c757d" Foreground="White"
+                               Padding="15,8" BorderThickness="0"
+                               Cursor="Hand" Margin="0,0,0,10"/>
+
+                        <Button Content="Export Diagnostics" 
+                               Command="{Binding ExportDiagnosticsCommand}"
+                               Background="#17a2b8" Foreground="White"
+                               Padding="15,8" BorderThickness="0"
+                               Cursor="Hand" Margin="0,0,0,10"/>
+                        <TextBlock Text="{Binding ExportDiagnosticsResult}" Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>
 
         <!-- Status -->
-        <StackPanel Grid.Row="2" Margin="0,10,0,0">
+        <StackPanel Grid.Row="4" Margin="0,10,0,0">
             <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" MaxHeight="80"/>
             <TextBlock Text="If Connect fails: Settings → Bluetooth → remove Micropad, power-cycle the Micropad, then Scan and Connect again." 
                        Foreground="{StaticResource TextTertiary}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>

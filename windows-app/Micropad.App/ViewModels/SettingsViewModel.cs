@@ -6,6 +6,7 @@ using System.Reflection;
 using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Micropad.App.DesignSystem;
 using Micropad.Services.Automation;
 using Micropad.Services.Storage;
 
@@ -15,6 +16,8 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly ForegroundMonitor _foregroundMonitor;
     private readonly SettingsStorage _settingsStorage;
+    private readonly ThemeService _themeService;
+    private readonly MotionService _motionService;
     private bool _loading;
 
     [ObservableProperty]
@@ -38,10 +41,33 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<KeyValuePair<string, int>> _processProfileMappings = new();
 
-    public SettingsViewModel(ForegroundMonitor foregroundMonitor, SettingsStorage settingsStorage)
+    [ObservableProperty]
+    private bool _manualLock;
+
+    [ObservableProperty]
+    private string _defaultProfileIdText = "";
+
+    [ObservableProperty]
+    private string _debounceMsText = "800";
+
+    [ObservableProperty]
+    private bool _isDarkTheme = true;
+
+    [ObservableProperty]
+    private bool _reduceMotion;
+
+    [ObservableProperty]
+    private string _backgroundMode = "Solid";
+
+    public IList<string> BackgroundModeOptions { get; } = new[] { "Solid", "Mica", "Acrylic" };
+
+    public SettingsViewModel(ForegroundMonitor foregroundMonitor, SettingsStorage settingsStorage,
+        ThemeService themeService, MotionService motionService)
     {
         _foregroundMonitor = foregroundMonitor;
         _settingsStorage = settingsStorage;
+        _themeService = themeService;
+        _motionService = motionService;
         LoadSettings();
     }
 
@@ -60,6 +86,15 @@ public partial class SettingsViewModel : ObservableObject
             StartWithWindows = s.StartWithWindows;
             MinimizeToTray = s.MinimizeToTray;
             AutoReconnect = s.AutoReconnect;
+            ManualLock = s.ManualLock;
+            DefaultProfileIdText = s.DefaultProfileId.HasValue ? s.DefaultProfileId.Value.ToString() : "";
+            DebounceMsText = s.DebounceMs > 0 ? s.DebounceMs.ToString() : "800";
+            IsDarkTheme = _themeService.IsDark;
+            ReduceMotion = _motionService.ReduceMotion;
+            BackgroundMode = string.IsNullOrEmpty(s.BackgroundMode) ? "Solid" : s.BackgroundMode;
+            _foregroundMonitor.ManualLock = s.ManualLock;
+            _foregroundMonitor.DefaultProfileId = s.DefaultProfileId;
+            _foregroundMonitor.DebounceMs = s.DebounceMs > 0 ? s.DebounceMs : 800;
             foreach (var kv in s.ForegroundMonitorMappings)
                 _foregroundMonitor.SetProcessProfileMapping(kv.Key, kv.Value);
             RefreshMappings();
@@ -75,13 +110,38 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_loading) return;
         var s = _settingsStorage.Load();
+        s.BackgroundMode = BackgroundMode;
         s.AutoConnect = AutoConnect;
         s.StartWithWindows = StartWithWindows;
         s.MinimizeToTray = MinimizeToTray;
         s.AutoReconnect = AutoReconnect;
         s.ForegroundMonitorMappings = new Dictionary<string, int>(_foregroundMonitor.GetMappings());
+        s.ManualLock = ManualLock;
+        s.DefaultProfileId = int.TryParse(DefaultProfileIdText?.Trim(), out var pid) && pid >= 0 && pid <= 7 ? pid : null;
+        s.DebounceMs = int.TryParse(DebounceMsText?.Trim(), out var ms) && ms > 0 ? ms : 800;
         _settingsStorage.Save(s);
+        _foregroundMonitor.ManualLock = ManualLock;
+        _foregroundMonitor.DefaultProfileId = s.DefaultProfileId;
+        _foregroundMonitor.DebounceMs = s.DebounceMs;
     }
+
+    partial void OnManualLockChanged(bool value) => SaveSettingsIfNotLoading();
+    partial void OnDefaultProfileIdTextChanged(string value) => SaveSettingsIfNotLoading();
+    partial void OnDebounceMsTextChanged(string value) => SaveSettingsIfNotLoading();
+
+    partial void OnIsDarkThemeChanged(bool value)
+    {
+        _themeService.IsDark = value;
+        SaveSettingsIfNotLoading();
+    }
+
+    partial void OnReduceMotionChanged(bool value)
+    {
+        _motionService.ReduceMotion = value;
+        SaveSettingsIfNotLoading();
+    }
+
+    partial void OnBackgroundModeChanged(string value) => SaveSettingsIfNotLoading();
 
     private static void ApplyStartWithWindows(bool enable)
     {

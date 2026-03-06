@@ -39,7 +39,17 @@ public partial class App : Application
                 services.AddSingleton<Micropad.Services.Storage.LocalMacroStorage>();
                 services.AddSingleton<Micropad.Services.Storage.SettingsStorage>();
                 services.AddSingleton<Micropad.Services.ProfileSyncService>();
+                services.AddSingleton<Micropad.Services.DiagnosticsService>();
+                services.AddSingleton<Micropad.Services.TrayService>();
+                services.AddSingleton<Micropad.Services.HudService>();
                 services.AddSingleton<Micropad.Services.Input.MacroRecorder>();
+                services.AddSingleton<Micropad.App.DesignSystem.ThemeService>();
+                services.AddSingleton<Micropad.App.DesignSystem.AccentService>();
+                services.AddSingleton<Micropad.App.DesignSystem.MotionService>();
+                services.AddSingleton<Micropad.App.DesignSystem.IconService>();
+                services.AddSingleton<Micropad.App.Services.CommandPaletteService>();
+                services.AddSingleton<Micropad.App.Services.SetupJourneyService>();
+                services.AddSingleton<Micropad.App.Services.IProfileConflictResolver, Micropad.App.Services.ProfileConflictResolverService>();
 
                 // ViewModels
                 services.AddSingleton<MainViewModel>();
@@ -48,11 +58,13 @@ public partial class App : Application
                 services.AddTransient<SettingsViewModel>();
                 services.AddTransient<MacrosViewModel>();
                 services.AddTransient<StatsViewModel>();
+                services.AddTransient<PresetsViewModel>();
                 services.AddSingleton<Micropad.Services.Automation.ForegroundMonitor>();
 
                 // Views/Pages
                 services.AddTransient<DevicesView>();
                 services.AddTransient<ProfilesView>();
+                services.AddTransient<PresetsView>();
                 services.AddTransient<MacrosView>();
                 services.AddTransient<StatsView>();
                 services.AddTransient<SettingsView>();
@@ -63,6 +75,10 @@ public partial class App : Application
             .Build();
 
         await _host.StartAsync();
+
+        // Apply theme and motion from settings (Design System)
+        var themeService = _host.Services.GetRequiredService<Micropad.App.DesignSystem.ThemeService>();
+        themeService.LoadFromSettings();
 
         // Apply persisted settings: AutoReconnect and optional auto-connect to last device
         var settingsStorage = _host.Services.GetRequiredService<Micropad.Services.Storage.SettingsStorage>();
@@ -85,6 +101,23 @@ public partial class App : Application
         // Show main window
         var mainWindow = _host.Services.GetRequiredService<MainWindow>();
         mainWindow.Show();
+
+        var trayService = _host.Services.GetRequiredService<Micropad.Services.TrayService>();
+        trayService.SetCallbacks(
+            () => { mainWindow.Dispatcher.Invoke(() => { mainWindow.Show(); mainWindow.WindowState = WindowState.Normal; mainWindow.Activate(); }); },
+            () => { mainWindow.Dispatcher.Invoke(() => Current.Shutdown()); });
+        trayService.Initialize();
+
+        var hudService = _host.Services.GetRequiredService<Micropad.Services.HudService>();
+        HudOverlayWindow? hudWindow = null;
+        hudService.ShowRequested += (_, text) =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                hudWindow ??= new Micropad.App.Views.HudOverlayWindow();
+                hudWindow.ShowHud(text, 1500);
+            });
+        };
     }
 
     protected override async void OnExit(ExitEventArgs e)

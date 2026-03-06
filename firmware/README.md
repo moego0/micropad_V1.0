@@ -90,3 +90,5 @@ This firmware uses **NimBLE only**. It does **not** use Bluetooth Classic or SPP
 - EVT (notify): `...914d`  
 
 Commands: `getDeviceInfo`, `listProfiles`, `getProfile`, `setProfile`, `setActiveProfile`, `getStats`, `factoryReset`, `reboot`.
+
+**See also:** [PROTOCOL_SPEC.md](../PROTOCOL_SPEC.md) (full envelope, chunking), [HOW_TO_RUN.md](../HOW_TO_RUN.md), [TROUBLESHOOTING.md](../TROUBLESHOOTING.md).

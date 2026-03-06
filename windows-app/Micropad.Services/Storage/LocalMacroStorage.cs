@@ -59,4 +59,91 @@ public class LocalMacroStorage
         public string? Name { get; set; }
         public List<MacroStep>? Steps { get; set; }
     }
+
+    // --- MacroAsset (GUID-based library) ---
+
+    public void SaveMacroAsset(MacroAsset asset)
+    {
+        asset.UpdatedAt = DateTime.UtcNow;
+        var path = Path.Combine(_macrosDirectory, asset.MacroId + ".json");
+        var json = JsonConvert.SerializeObject(asset, Formatting.Indented);
+        File.WriteAllText(path, json);
+    }
+
+    public MacroAsset? LoadMacroAsset(string macroId)
+    {
+        var path = Path.Combine(_macrosDirectory, macroId + ".json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var json = File.ReadAllText(path);
+            return JsonConvert.DeserializeObject<MacroAsset>(json);
+        }
+        catch { return null; }
+    }
+
+    public List<MacroAsset> GetAllMacroAssets()
+    {
+        var list = new List<MacroAsset>();
+        if (!Directory.Exists(_macrosDirectory)) return list;
+        foreach (var file in Directory.EnumerateFiles(_macrosDirectory, "*.json"))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var asset = JsonConvert.DeserializeObject<MacroAsset>(json);
+                if (asset != null) list.Add(asset);
+            }
+            catch { }
+        }
+        return list.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public List<MacroAsset> SearchMacros(string? searchText, IReadOnlyList<string>? tagFilter)
+    {
+        var all = GetAllMacroAssets();
+        if (string.IsNullOrWhiteSpace(searchText) && (tagFilter == null || tagFilter.Count == 0))
+            return all;
+        return all.Where(m =>
+        {
+            if (!string.IsNullOrWhiteSpace(searchText) &&
+                m.Name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) < 0 &&
+                !m.Tags.Any(t => t.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0))
+                return false;
+            if (tagFilter != null && tagFilter.Count > 0 && !tagFilter.Any(t => m.Tags.Contains(t, StringComparer.OrdinalIgnoreCase)))
+                return false;
+            return true;
+        }).ToList();
+    }
+
+    public void DeleteMacroAsset(string macroId)
+    {
+        var path = Path.Combine(_macrosDirectory, macroId + ".json");
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    public void ExportMacroAsset(MacroAsset asset, string filePath)
+    {
+        var json = JsonConvert.SerializeObject(asset, Formatting.Indented);
+        File.WriteAllText(filePath, json);
+    }
+
+    public MacroAsset? ImportMacroAsset(string filePath)
+    {
+        if (!File.Exists(filePath)) return null;
+        try
+        {
+            var json = File.ReadAllText(filePath);
+            var asset = JsonConvert.DeserializeObject<MacroAsset>(json);
+            if (asset != null)
+            {
+                asset.MacroId = Guid.NewGuid().ToString("N");
+                asset.CreatedAt = DateTime.UtcNow;
+                asset.UpdatedAt = DateTime.UtcNow;
+                SaveMacroAsset(asset);
+            }
+            return asset;
+        }
+        catch { return null; }
+    }
 }

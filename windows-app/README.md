@@ -12,6 +12,8 @@ Professional WPF application for configuring and managing your Micropad wireless
 
 ## Building
 
+**Important:** Close Micropad.App before building. A running instance locks its DLLs and causes `MSB3026` / `MSB3027` copy errors.
+
 ```bash
 cd windows-app
 dotnet restore
@@ -19,7 +21,9 @@ dotnet build
 dotnet run --project Micropad.App
 ```
 
-**If build fails with "file is locked" / "being used by another process"**: the app is already running and has locked its DLLs. Either close Micropad.App and run again, or use the helper script which closes any existing instance first:
+**If you see "file is locked" or "being used by another process" (Micropad.App PID ...):**
+1. Close the Micropad.App window (or Task Manager → End task), then run `dotnet build` again.
+2. Or use the helper script—it closes any existing instance, then builds and runs:
 
 ```powershell
 .\run-app.ps1
@@ -141,6 +145,13 @@ Messages over ~512 bytes are sent in chunks so they fit in BLE MTU.
 - **Bluetooth / scan** – Enable Bluetooth (and BLE), grant app access, restart app.
 - **Profile push fails** – Ensure connection is active; firmware must support `setProfile`.
 - **Stats empty** – Device must implement `getStats` and return `keyPresses`, `encoderTurns`, `uptime`.
+
+## See also
+
+- **[HOW_TO_RUN.md](../HOW_TO_RUN.md)** — Quick start (firmware + app)
+- **[PROTOCOL_SPEC.md](../PROTOCOL_SPEC.md)** — BLE commands, events, chunking
+- **[TROUBLESHOOTING.md](../TROUBLESHOOTING.md)** — Windows BLE pairing, connection issues
+- **[REQUIREMENTS_SYNC.md](../REQUIREMENTS_SYNC.md)** — Product requirements vs current implementation
 
 ## License
 

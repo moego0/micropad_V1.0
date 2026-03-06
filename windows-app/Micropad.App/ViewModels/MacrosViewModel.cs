@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 using Micropad.Core;
 using Micropad.Core.Models;
 using Micropad.Services.Input;
@@ -38,12 +39,52 @@ public partial class MacrosViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedSequence = string.Empty;
 
+    [ObservableProperty]
+    private string _urlInput = string.Empty;
+
+    [ObservableProperty]
+    private string _applicationPathInput = string.Empty;
+
+    [ObservableProperty]
+    private string _selectedBrowser = "Default";
+
+    [ObservableProperty]
+    private string _textToAdd = string.Empty;
+
+    [ObservableProperty]
+    private MacroStep? _selectedStep;
+
+    public bool IsInspectorVisible => SelectedStep != null;
+    public bool IsDelayStep => SelectedStep?.Action == "delay";
+    public bool IsTextStep => SelectedStep?.Action == "textType";
+    public bool IsKeyStep => SelectedStep != null && (SelectedStep.Action == "keyPress" || SelectedStep.Action == "keyDown" || SelectedStep.Action == "keyUp");
+
+    partial void OnSelectedStepChanged(MacroStep? value)
+    {
+        OnPropertyChanged(nameof(IsInspectorVisible));
+        OnPropertyChanged(nameof(IsDelayStep));
+        OnPropertyChanged(nameof(IsTextStep));
+        OnPropertyChanged(nameof(IsKeyStep));
+    }
+
+    public ObservableCollection<string> Browsers { get; } = new()
+    {
+        "Default",
+        "Chrome",
+        "Edge",
+        "Firefox",
+        "Opera",
+        "Brave"
+    };
+
     public ObservableCollection<MacroTag> AllTags { get; } = new();
     public IEnumerable<IGrouping<string, MacroTag>> TagGroups => AllTags.GroupBy(t => t.Group).OrderBy(g => g.Key);
 
     public bool IsNotRecording => !IsRecording;
 
     public int StepCount => Steps.Count;
+
+    public bool IsStepsEmpty => Steps.Count == 0;
 
     public MicroSlot? SelectedSlot => SelectedSlotIndex >= 0 && SelectedSlotIndex < Slots.Count ? Slots[SelectedSlotIndex] : null;
 
@@ -135,6 +176,7 @@ public partial class MacrosViewModel : ObservableObject
         _recorder.StartRecording();
         IsRecording = true;
         Steps.Clear();
+        OnPropertyChanged(nameof(IsStepsEmpty));
         StatusText = "Recording... Press keys. Click Stop when done.";
     }
 
@@ -149,6 +191,7 @@ public partial class MacrosViewModel : ObservableObject
             Steps.Add(s);
         }
         OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
         StatusText = $"Recorded {Steps.Count} step(s).";
     }
 
@@ -157,6 +200,7 @@ public partial class MacrosViewModel : ObservableObject
     {
         Steps.Add(new MacroStep { Action = "delay", DelayMs = 100 });
         OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
         StatusText = "Added delay step.";
     }
 
@@ -165,6 +209,35 @@ public partial class MacrosViewModel : ObservableObject
     {
         if (string.IsNullOrEmpty(keyName)) keyName = "A";
         Steps.Add(new MacroStep { Action = "keyPress", Key = keyName });
+        OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
+    }
+
+    [RelayCommand]
+    private void AddText()
+    {
+        var text = (TextToAdd ?? "").Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            StatusText = "Enter text first.";
+            return;
+        }
+        Steps.Add(new MacroStep { Action = "textType", Text = text });
+        TextToAdd = string.Empty;
+        OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
+        StatusText = "Added text step.";
+    }
+
+    [RelayCommand]
+    private void ClearMacro()
+    {
+        Steps.Clear();
+        SelectedStep = null;
+        MacroName = "New Macro";
+        OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
+        StatusText = "Macro cleared. Record or add steps to start fresh.";
     }
 
     [RelayCommand]
@@ -172,9 +245,35 @@ public partial class MacrosViewModel : ObservableObject
     {
         if (step != null && Steps.Contains(step))
         {
+            if (step == SelectedStep) SelectedStep = null;
             Steps.Remove(step);
             OnPropertyChanged(nameof(StepCount));
+            OnPropertyChanged(nameof(IsStepsEmpty));
         }
+    }
+
+    [RelayCommand]
+    private void MoveStepUp(MacroStep? step)
+    {
+        if (step == null || !Steps.Contains(step)) return;
+        var i = Steps.IndexOf(step);
+        if (i <= 0) return;
+        Steps.Move(i, i - 1);
+        OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
+        StatusText = "Step moved up.";
+    }
+
+    [RelayCommand]
+    private void MoveStepDown(MacroStep? step)
+    {
+        if (step == null || !Steps.Contains(step)) return;
+        var i = Steps.IndexOf(step);
+        if (i < 0 || i >= Steps.Count - 1) return;
+        Steps.Move(i, i + 1);
+        OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
+        StatusText = "Step moved down.";
     }
 
     [RelayCommand]
@@ -182,6 +281,7 @@ public partial class MacrosViewModel : ObservableObject
     {
         Steps.Clear();
         OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(IsStepsEmpty));
         StatusText = "Steps cleared.";
     }
 
@@ -204,13 +304,175 @@ public partial class MacrosViewModel : ObservableObject
         StatusText = $"Saved macro '{name}'.";
     }
 
+    [RelayCommand]
+    private void ExportMacro()
+    {
+        var name = (MacroName ?? "").Trim();
+        if (string.IsNullOrEmpty(name)) name = "Unnamed";
+        if (Steps.Count == 0)
+        {
+            StatusText = "Add steps or record a macro first.";
+            return;
+        }
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Macro JSON (*.json)|*.json|All files (*.*)|*.*",
+            DefaultExt = "json",
+            FileName = name + ".json"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var asset = new MacroAsset
+            {
+                Name = name,
+                Steps = GetStepsCopy(),
+                MacroId = Guid.NewGuid().ToString("N"),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _macroStorage.ExportMacroAsset(asset, dialog.FileName);
+            StatusText = $"Exported to {dialog.FileName}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Export failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ImportMacro()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Macro JSON (*.json)|*.json|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var asset = _macroStorage.ImportMacroAsset(dialog.FileName);
+            if (asset != null)
+            {
+                MacroName = asset.Name;
+                SelectedStep = null;
+                Steps.Clear();
+                foreach (var s in asset.Steps)
+                    Steps.Add(s);
+                OnPropertyChanged(nameof(StepCount));
+                OnPropertyChanged(nameof(IsStepsEmpty));
+                StatusText = $"Imported '{asset.Name}'. Assign it from Profiles.";
+            }
+            else
+                StatusText = "Import failed or file invalid.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Import failed: {ex.Message}";
+        }
+    }
+
     public List<MacroStep> GetStepsCopy()
     {
         return Steps.Select(s => new MacroStep
         {
             Action = s.Action,
             Key = s.Key,
-            DelayMs = s.DelayMs
+            DelayMs = s.DelayMs,
+            Text = s.Text,
+            Value = s.Value,
+            VkCode = s.VkCode,
+            MediaFunction = s.MediaFunction
         }).ToList();
+    }
+
+    [RelayCommand]
+    private void InsertUrl()
+    {
+        if (string.IsNullOrWhiteSpace(UrlInput))
+        {
+            StatusText = "Enter a URL first.";
+            return;
+        }
+        if (SelectedSlot == null)
+        {
+            StatusText = "Select a key or encoder slot first.";
+            return;
+        }
+
+        var url = UrlInput.Trim();
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && 
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            url = "https://" + url;
+        }
+
+        string browserTag;
+        switch (SelectedBrowser)
+        {
+            case "Chrome":
+                browserTag = "{RUN:chrome.exe " + url + "}";
+                break;
+            case "Edge":
+                browserTag = "{RUN:msedge.exe " + url + "}";
+                break;
+            case "Firefox":
+                browserTag = "{RUN:firefox.exe " + url + "}";
+                break;
+            case "Opera":
+                browserTag = "{RUN:opera.exe " + url + "}";
+                break;
+            case "Brave":
+                browserTag = "{RUN:brave.exe " + url + "}";
+                break;
+            default:
+                // Use Windows shell start command for default browser
+                browserTag = "{RUN:start " + url + "}";
+                break;
+        }
+
+        SelectedSlot.Sequence += browserTag;
+        SelectedSequence = SelectedSlot.Sequence;
+        OnPropertyChanged(nameof(Slots));
+        StatusText = $"Added URL to {SelectedSlot.Label}.";
+        UrlInput = string.Empty;
+    }
+
+    [RelayCommand]
+    private void InsertApplication()
+    {
+        if (string.IsNullOrWhiteSpace(ApplicationPathInput))
+        {
+            StatusText = "Enter an application path first.";
+            return;
+        }
+        if (SelectedSlot == null)
+        {
+            StatusText = "Select a key or encoder slot first.";
+            return;
+        }
+
+        var path = ApplicationPathInput.Trim();
+        var appTag = "{RUN:" + path + "}";
+        
+        SelectedSlot.Sequence += appTag;
+        SelectedSequence = SelectedSlot.Sequence;
+        OnPropertyChanged(nameof(Slots));
+        StatusText = $"Added application to {SelectedSlot.Label}.";
+        ApplicationPathInput = string.Empty;
+    }
+
+    [RelayCommand]
+    private void BrowseApplication()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+            Title = "Select Application"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            ApplicationPathInput = dialog.FileName;
+        }
     }
 }

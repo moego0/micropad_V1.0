@@ -124,7 +124,8 @@ public class MacroRecorder
             _hookId = IntPtr.Zero;
         }
 
-        return ConvertToDelays(_steps);
+        // Return key steps only; user adds delays manually via "Add delay" button.
+        return ConvertNoDelays(_steps);
     }
 
     private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -154,19 +155,12 @@ public class MacroRecorder
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    private static List<MacroStep> ConvertToDelays(List<MacroStep> raw)
+    /// <summary>Returns key steps without any delay steps; user adds delays manually.</summary>
+    private static List<MacroStep> ConvertNoDelays(List<MacroStep> raw)
     {
         var result = new List<MacroStep>();
-        int lastTime = 0;
-
         foreach (var step in raw)
         {
-            var delay = step.DelayMs - lastTime;
-            if (delay > 0)
-            {
-                result.Add(new MacroStep { Action = "delay", DelayMs = delay });
-            }
-
             result.Add(new MacroStep
             {
                 Action = step.Action,
@@ -174,9 +168,7 @@ public class MacroRecorder
                 VkCode = step.VkCode,
                 DelayMs = 0
             });
-            lastTime = step.DelayMs;
         }
-
         return result;
     }
 

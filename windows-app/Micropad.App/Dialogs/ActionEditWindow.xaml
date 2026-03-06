@@ -97,9 +97,11 @@
                 </StackPanel>
                 <!-- Macro -->
                 <StackPanel x:Name="MacroPanel" Visibility="Collapsed">
-                    <TextBlock Text="Macro" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
+                    <TextBlock Text="Macro (from library)" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,5"/>
                     <ComboBox x:Name="MacroCombo" Height="28" Background="{StaticResource BgInput}"
-                              Foreground="{StaticResource TextPrimary}" Padding="6,4"/>
+                              Foreground="{StaticResource TextPrimary}" Padding="6,4" DisplayMemberPath="Name"/>
+                    <CheckBox x:Name="MacroEmbedCheck" Content="Embed copy (portable snapshot)" 
+                              Foreground="{StaticResource TextPrimary}" Margin="0,8,0,0"/>
                 </StackPanel>
             </StackPanel>
         </Border>

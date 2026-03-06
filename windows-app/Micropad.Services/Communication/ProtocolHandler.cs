@@ -108,6 +108,34 @@ public class ProtocolHandler
         return response?.Payload;
     }
 
+    public async Task<DeviceCaps?> GetCapsAsync()
+    {
+        var response = await SendRequestAsync("getCaps");
+        if (response?.Payload == null) return null;
+        return response.Payload.ToObject<DeviceCaps>();
+    }
+
+    public async Task<int?> GetActiveProfileAsync()
+    {
+        var response = await SendRequestAsync("getActiveProfile");
+        var id = response?.Payload?["profileId"]?.Value<int>();
+        return id;
+    }
+
+    public async Task<bool> DeleteProfileAsync(int profileId)
+    {
+        var message = new ProtocolMessage
+        {
+            Version = 1,
+            Type = "request",
+            Id = GetNextRequestId(),
+            Command = "deleteProfile",
+            ProfileId = profileId
+        };
+        var response = await SendRequestAsync(message);
+        return response?.Payload?["success"]?.Value<bool>() ?? false;
+    }
+
     private async Task<ProtocolMessage?> SendRequestAsync(string command, JObject? payload = null)
     {
         var message = new ProtocolMessage
@@ -227,7 +255,7 @@ public class ProtocolHandler
         var message = JsonConvert.DeserializeObject<ProtocolMessage>(json);
         if (message == null) return;
 
-        if (message.Type == "response")
+        if (message.Type == "response" || message.Type == "RESP")
         {
             if (_pendingRequests.TryRemove(message.Id, out var tcs))
                 tcs.TrySetResult(message);

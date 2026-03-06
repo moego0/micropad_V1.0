@@ -9,5 +9,6 @@ public partial class DevicesView : Page
     {
         InitializeComponent();
         DataContext = viewModel;
+        Loaded += (_, _) => viewModel.SetupJourney.Refresh();
     }
 }
