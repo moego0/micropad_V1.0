@@ -220,7 +220,7 @@ void BLEConfigService::sendChunked(const String& message) {
         _evtChar->setValue(chunk.c_str());
         _evtChar->notify();
         
-        delay(10);  // Small delay between chunks
+        yield();  // Allow BLE stack to run; avoid long blocking
     }
     
     DEBUG_PRINTLN("Chunked message sent");

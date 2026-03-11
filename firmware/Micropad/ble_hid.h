@@ -130,10 +130,10 @@ public:
     
     // Called from server callbacks (do not send HID reports until HID is ready)
     void onConnect();
-    void onDisconnect(int reason);
+    void onDisconnect(int reason, uint16_t connHandle);
     
     // Called when a client subscribes to HID report (indicates HID host, not config-only)
-    void onHidHostSubscribed();
+    void onHidHostSubscribed(uint16_t connHandle);
     
     // Public for action executor and protocol status
     bool isHidReady() const;
@@ -145,7 +145,8 @@ private:
     NimBLECharacteristic* _inputMouse;
     bool _connected;
     unsigned long _readyAtMs;   // HID reports allowed only when millis() >= _readyAtMs (avoids Event 411)
-    bool _loggedHidReady;      // Log "[BLE] HID ready" once when becoming ready
+    bool _loggedHidReady;       // Log "[BLE] HID ready" once when becoming ready
+    uint16_t _hidHostConnHandle; // conn handle that subscribed to HID (so we only clear HID when it disconnects)
     
     uint8_t _keyReport[8];
     uint8_t _mouseReport[4];

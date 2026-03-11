@@ -61,7 +61,7 @@ function normalizeError(err: unknown): string {
 }
 
 const CHUNK_PAYLOAD_BYTES = 80;
-const CHUNK_DELAY_MS = 250;
+const CHUNK_DELAY_MS = 300;
 const SEND_RETRIES = 2;
 const RETRY_DELAY_MS = 800;
 
@@ -109,14 +109,16 @@ export class BleConnection {
     if (!device?.gatt) { this.setState('error', 'No device or GATT'); return false; }
     if (this.device && this.device !== device) { this.disposeHandles(); this.device = null; }
     this.device = device;
+    const gatt = this.device.gatt!;
     this.setState(this.state === 'reconnectingGrantedDevice' ? 'reconnectingGrantedDevice' : 'connectingGatt');
     try {
-      const server = await this.device.gatt.connect();
+      const server = await gatt.connect();
       const service = await server.getPrimaryService(CONFIG_SERVICE);
       this.cmdChar = await service.getCharacteristic(CMD_CHAR);
       this.evtChar = await service.getCharacteristic(EVT_CHAR);
       this.evtListener = (e: Event) => {
-        const val = (e.target as BluetoothRemoteGATTCharacteristic)?.value;
+        const char = e.target as unknown as BluetoothRemoteGATTCharacteristic | null;
+        const val = char?.value;
         if (val) this.callbacks.onMessage(new TextDecoder().decode(val));
       };
       this.evtChar.addEventListener('characteristicvaluechanged', this.evtListener);
@@ -126,7 +128,10 @@ export class BleConnection {
       this.clearDisconnectHandler();
       const handler = () => { this.clearDisconnectHandler(); this.disposeHandles(); this.setState('idle'); this.callbacks.onDisconnected(); };
       this.device.addEventListener('gattserverdisconnected', handler);
-      this.disconnectHandler = () => { this.device?.removeEventListener('gattserverdisconnected', handler); this.disconnectHandler = null; };
+      this.disconnectHandler = () => {
+        (this.device as EventTarget | null)?.removeEventListener('gattserverdisconnected', handler);
+        this.disconnectHandler = null;
+      };
       return true;
     } catch (err: unknown) {
       this.setState('error', normalizeError(err));

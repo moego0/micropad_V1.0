@@ -28,7 +28,6 @@ function stateLabel(state: string): string {
 
 export default function DevicesPage() {
   const init = useDeviceStore((s) => s.init);
-  const connect = useDeviceStore((s) => s.connect);
   const disconnect = useDeviceStore((s) => s.disconnect);
   const requestAccess = useDeviceStore((s) => s.requestAccess);
   const reconnectToGranted = useDeviceStore((s) => s.reconnectToGranted);
@@ -92,6 +91,9 @@ export default function DevicesPage() {
         a device you’ve already allowed, or <span className="font-semibold text-text-primary">Request access</span> to
         open the browser pairing dialog (user gesture required).
       </p>
+      <p className="text-sm text-amber-600 dark:text-amber-400 mb-4 max-w-2xl rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+        <strong>If the Micropad is already connected to the PC</strong> (as a keyboard), use <strong>Reconnect</strong> below—not Request access—to connect from the browser. Request access may not show the device when it’s paired to the PC. Ensure the firmware allows 2 BLE connections (see MULTI_CONNECTION.md).
+      </p>
 
       {/* Connection status card */}
       <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
@@ -120,6 +122,11 @@ export default function DevicesPage() {
             connected as a HID device (e.g. paired in Windows).
           </p>
         )}
+        {isFullyReady && (
+          <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-3">
+            You can edit profiles here and use the device as a keyboard/encoder on the PC at the same time.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleRequestAccess}
@@ -127,6 +134,17 @@ export default function DevicesPage() {
             className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-emerald-500/40 transition"
           >
             Request access
+          </button>
+          <button
+            onClick={() => {
+              const first = grantedDevices[0];
+              if (first?.device) reconnectToGranted(first.device);
+            }}
+            disabled={isConnecting || grantedDevices.length === 0 || isConfigConnected}
+            title={grantedDevices.length === 0 ? 'Connect once with Request access to enable Reconnect' : undefined}
+            className="px-5 py-2.5 bg-brand-blue hover:bg-brand-blue/90 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-brand-blue/40 transition"
+          >
+            Reconnect
           </button>
           <button
             onClick={() => disconnect()}
@@ -142,6 +160,11 @@ export default function DevicesPage() {
             Refresh list
           </button>
         </div>
+        {!isConfigConnected && grantedDevices.length === 0 && (
+          <p className="mt-3 text-sm text-text-tertiary">
+            <strong>Reconnect</strong> is enabled after you connect once with <strong>Request access</strong>. If the Micropad is already paired to the PC: in Windows, disconnect it from Bluetooth (Quick settings → Bluetooth → Micropad), then click <strong>Request access</strong> here to pair this browser. After that, <strong>Reconnect</strong> will work even when the Micropad is connected to the PC.
+          </p>
+        )}
         {lastError && (
           <p className="mt-3 text-sm text-red-400" role="alert">
             {lastError}
@@ -203,8 +226,9 @@ export default function DevicesPage() {
       </div>
 
       <p className="text-xs text-text-tertiary">
-        If the device doesn’t appear: ensure it’s on and advertising. If it’s already connected to the PC, it may not
-        show in the chooser until the PC disconnects. Use Reconnect for a previously granted device when possible.
+        If the device doesn’t appear: ensure it’s on and advertising. When the device is connected to the PC as HID,
+        you can still connect from the browser to edit profiles (if the firmware allows two connections). Use Reconnect
+        for a previously granted device when possible. Refreshing the page (F5) closes the connection—use Reconnect to connect again.
       </p>
     </div>
   );

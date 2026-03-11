@@ -13,14 +13,19 @@ const unsigned long HID_READY_DELAY_MS = 1500;
 class HidServerCallbacks : public NimBLEServerCallbacks {
 public:
     void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
-        (void)pServer;
-        Serial.printf("[BLE] Client connected, conn_id=%d\n", connInfo.getConnHandle());
+        (void)connInfo;
+        Serial.printf("[BLE] Client connected, conn_id=%d (total %d)\n", connInfo.getConnHandle(), pServer->getConnectedCount());
         if (g_pKeyboard) g_pKeyboard->onConnect();
+        // Keep advertising so a second central can connect (PC HID + browser config at once).
+        // Requires CONFIG_BT_NIMBLE_MAX_CONNECTIONS >= 2 in NimBLE library (see MULTI_CONNECTION.md).
+        NimBLEDevice::startAdvertising();
+        Serial.println("[BLE] Advertising restarted for multi-connection");
     }
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
-        (void)connInfo;
-        Serial.printf("[BLE] Client disconnected, reason=%d (0x%02x)\n", reason, (unsigned)reason);
-        if (g_pKeyboard) g_pKeyboard->onDisconnect(reason);
+        (void)pServer;
+        uint16_t h = connInfo.getConnHandle();
+        Serial.printf("[BLE] Client disconnected, conn_id=%d, reason=%d (0x%02x)\n", h, reason, (unsigned)reason);
+        if (g_pKeyboard) g_pKeyboard->onDisconnect(reason, h);
         NimBLEDevice::startAdvertising();
         Serial.println("[BLE] Advertising restarted");
     }
@@ -31,9 +36,8 @@ class HidReportSubscribeCallbacks : public NimBLECharacteristicCallbacks {
 public:
     void onSubscribe(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo, uint16_t subValue) override {
         (void)pCharacteristic;
-        (void)connInfo;
         (void)subValue;
-        if (g_pKeyboard) g_pKeyboard->onHidHostSubscribed();
+        if (g_pKeyboard) g_pKeyboard->onHidHostSubscribed(connInfo.getConnHandle());
     }
 };
 
@@ -127,6 +131,7 @@ BLEKeyboard::BLEKeyboard() {
     _connected = false;
     _readyAtMs = 0;
     _loggedHidReady = false;
+    _hidHostConnHandle = 0;
     _clearKeyboardReport();
     memset(_mouseReport, 0, sizeof(_mouseReport));
 }
@@ -222,19 +227,23 @@ void BLEKeyboard::onConnect() {
     Serial.println("[BLE] Client connected (HID ready only after host subscribes to reports)");
 }
 
-void BLEKeyboard::onHidHostSubscribed() {
-    if (_connected) return;  // Already marked as HID host
+void BLEKeyboard::onHidHostSubscribed(uint16_t connHandle) {
+    if (_connected) return;
+    _hidHostConnHandle = connHandle;
     _connected = true;
     _readyAtMs = millis() + HID_READY_DELAY_MS;
     _loggedHidReady = false;
-    Serial.printf("[BLE] HID host subscribed; reports enabled in %lu ms\n", (unsigned long)HID_READY_DELAY_MS);
+    Serial.printf("[BLE] HID host subscribed (conn %u); reports enabled in %lu ms\n", (unsigned)connHandle, (unsigned long)HID_READY_DELAY_MS);
 }
 
-void BLEKeyboard::onDisconnect(int reason) {
+void BLEKeyboard::onDisconnect(int reason, uint16_t connHandle) {
     (void)reason;
-    _connected = false;
-    _readyAtMs = 0;
-    _loggedHidReady = false;
+    if (connHandle == _hidHostConnHandle) {
+        _connected = false;
+        _readyAtMs = 0;
+        _loggedHidReady = false;
+        _hidHostConnHandle = 0;
+    }
 }
 
 bool BLEKeyboard::isHidReady() const {
@@ -264,6 +273,7 @@ void BLEKeyboard::update() {
             _connected = false;
             _readyAtMs = 0;
             _loggedHidReady = false;
+            _hidHostConnHandle = 0;
         }
         return;
     }

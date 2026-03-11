@@ -115,6 +115,8 @@ void ProtocolHandler::handleMessage(const String& json) {
 void ProtocolHandler::processDeferred() {
     if (_deferredMessage.length() == 0) return;
     
+    yield();  // Let BLE and other tasks run before heavy work
+    
     String json = _deferredMessage;
     _deferredMessage = "";
     _processingDeferred = true;
@@ -138,6 +140,7 @@ void ProtocolHandler::processDeferred() {
     uint32_t id = doc["id"] | 0;
     handleSetProfile(id, doc);
     _processingDeferred = false;
+    yield();  // Let BLE process notifications/connection after save
 }
 
 void ProtocolHandler::handleGetDeviceInfo(uint32_t requestId) {
