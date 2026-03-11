@@ -283,6 +283,22 @@ void ProfileStorage::_serializeAction(const Action& action, JsonObject obj) {
             obj["profileId"] = action.config.profile.profileId;
             break;
             
+        case ACTION_MACRO: {
+            JsonArray stepsArr = obj.createNestedArray("macroSteps");
+            for (uint8_t i = 0; i < action.config.macro.stepCount && i < MAX_MACRO_STEPS; i++) {
+                JsonObject step = stepsArr.createNestedObject();
+                step["stepType"] = action.config.macro.steps[i].stepType;
+                step["delayMs"] = action.config.macro.steps[i].delayMs;
+                step["key"] = action.config.macro.steps[i].key;
+                step["modifiers"] = action.config.macro.steps[i].modifiers;
+                if (action.config.macro.steps[i].text[0] != '\0') {
+                    step["text"] = action.config.macro.steps[i].text;
+                }
+                step["mediaFunction"] = action.config.macro.steps[i].mediaFunction;
+            }
+            break;
+        }
+            
         default:
             break;
     }
@@ -313,6 +329,24 @@ void ProfileStorage::_deserializeAction(JsonObjectConst obj, Action& action) {
         case ACTION_PROFILE:
             action.config.profile.profileId = obj["profileId"] | 0;
             break;
+            
+        case ACTION_MACRO: {
+            memset(&action.config.macro, 0, sizeof(MacroConfig));
+            JsonArrayConst stepsArr = obj["macroSteps"].as<JsonArrayConst>();
+            uint8_t count = 0;
+            for (JsonObjectConst stepObj : stepsArr) {
+                if (count >= MAX_MACRO_STEPS) break;
+                action.config.macro.steps[count].stepType = stepObj["stepType"] | 0;
+                action.config.macro.steps[count].delayMs = stepObj["delayMs"] | 0;
+                action.config.macro.steps[count].key = stepObj["key"] | 0;
+                action.config.macro.steps[count].modifiers = stepObj["modifiers"] | 0;
+                strlcpy(action.config.macro.steps[count].text, stepObj["text"] | "", sizeof(action.config.macro.steps[count].text));
+                action.config.macro.steps[count].mediaFunction = stepObj["mediaFunction"] | 0;
+                count++;
+            }
+            action.config.macro.stepCount = count;
+            break;
+        }
             
         default:
             break;

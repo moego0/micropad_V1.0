@@ -1,33 +1,34 @@
 import { create } from 'zustand';
-import type { MacroAsset, MacroStep } from '../models/types';
+import type { MacroAsset, MacroStepConfig } from '../models/types';
 import * as macroStorage from '../storage/macroStorage';
 
 interface MacrosStore {
   macroAssets: MacroAsset[];
   currentName: string;
-  currentSteps: MacroStep[];
+  currentSteps: MacroStepConfig[];
   selectedStepIndex: number;
   statusText: string;
   loadMacros: () => Promise<void>;
   setCurrentName: (name: string) => void;
-  setCurrentSteps: (steps: MacroStep[]) => void;
-  addStep: (step: MacroStep) => void;
+  setCurrentSteps: (steps: MacroStepConfig[]) => void;
+  addStep: (step: MacroStepConfig) => void;
   removeStep: (index: number) => void;
   moveStep: (from: number, to: number) => void;
-  updateStep: (index: number, step: Partial<MacroStep>) => void;
+  updateStep: (index: number, step: Partial<MacroStepConfig>) => void;
   setSelectedStepIndex: (i: number) => void;
   clearCurrent: () => void;
   saveCurrent: () => Promise<void>;
   loadMacroIntoCurrent: (asset: MacroAsset) => void;
+  deleteMacro: (macroId: string) => Promise<void>;
   setStatus: (s: string) => void;
 }
 
 export const useMacrosStore = create<MacrosStore>((set, get) => ({
   macroAssets: [],
-  currentName: 'New Macro',
+  currentName: '',
   currentSteps: [],
   selectedStepIndex: -1,
-  statusText: 'Create a macro or add steps.',
+  statusText: '',
 
   loadMacros: async () => {
     const list = await macroStorage.getAllMacros();
@@ -69,14 +70,14 @@ export const useMacrosStore = create<MacrosStore>((set, get) => ({
   },
 
   clearCurrent: () => {
-    set((s) => ({ ...s, currentName: 'New Macro', currentSteps: [], selectedStepIndex: -1, statusText: 'Macro cleared.' }));
+    set((s) => ({ ...s, currentName: '', currentSteps: [], selectedStepIndex: -1, statusText: '' }));
   },
 
   saveCurrent: async () => {
     const { currentName, currentSteps } = get();
-    const name = currentName.trim() || 'Unnamed';
+    const name = currentName.trim() || 'Unnamed Macro';
     if (currentSteps.length === 0) {
-      set((s) => ({ ...s, statusText: 'Add steps first.' }));
+      set((s) => ({ ...s, statusText: 'Add at least one step before saving.' }));
       return;
     }
     const asset: MacroAsset = {
@@ -90,7 +91,7 @@ export const useMacrosStore = create<MacrosStore>((set, get) => ({
     };
     await macroStorage.saveMacro(asset);
     const list = await macroStorage.getAllMacros();
-    set((s) => ({ ...s, macroAssets: list, statusText: `Saved macro '${name}'.` }));
+    set((s) => ({ ...s, macroAssets: list, statusText: `"${name}" saved to library` }));
   },
 
   loadMacroIntoCurrent: (asset) => {
@@ -99,7 +100,13 @@ export const useMacrosStore = create<MacrosStore>((set, get) => ({
       currentName: asset.name,
       currentSteps: asset.steps.map((x) => ({ ...x })),
       selectedStepIndex: -1,
-      statusText: `Loaded '${asset.name}'`
+      statusText: `Loaded "${asset.name}"`
     }));
+  },
+
+  deleteMacro: async (macroId: string) => {
+    await macroStorage.deleteMacro(macroId);
+    const list = await macroStorage.getAllMacros();
+    set((s) => ({ ...s, macroAssets: list, statusText: 'Macro deleted' }));
   }
 }));

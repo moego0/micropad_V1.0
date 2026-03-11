@@ -1,4 +1,4 @@
-/** Action types for key assignment (matches firmware/Core). */
+/** Action types matching firmware enum (profile.h) */
 export enum ActionType {
   None = 0,
   Hotkey = 1,
@@ -27,25 +27,10 @@ export enum MouseAction {
   RightClick = 1,
   MiddleClick = 2,
   ScrollUp = 3,
-  ScrollDown = 4,
-  ScrollLeft = 5,
-  ScrollRight = 6
+  ScrollDown = 4
 }
 
-export interface KeyAction {
-  type: ActionType;
-  modifiers?: number;
-  key?: number;
-  text?: string;
-  function?: number;
-  action?: number;
-  value?: number;
-  profileId?: number;
-  path?: string;
-  url?: string;
-  macroId?: string;
-}
-
+/** Key action config — flat structure matching firmware JSON format */
 export interface KeyConfig {
   index: number;
   type: ActionType;
@@ -56,45 +41,32 @@ export interface KeyConfig {
   action: number;
   value: number;
   profileId: number;
-  AppPath?: string;
-  url?: string;
-  macroId?: string;
-  macroSnapshot?: MacroStep[];
-  tapAction?: KeyAction;
-  holdAction?: KeyAction;
-  doubleTapAction?: KeyAction;
+  macroSteps?: MacroStepConfig[];
 }
 
+/** Encoder action — uses numeric types matching firmware */
 export interface EncoderActionConfig {
-  type: string;
+  type: number;       // ActionType numeric value
   value?: number;
   key?: number;
   modifiers?: number;
-  mediaFunction?: number;
+  function?: number;  // MediaFunction numeric value
+  action?: number;    // MouseAction numeric value
 }
 
 export interface EncoderConfig {
   index: number;
   acceleration: boolean;
   stepsPerDetent: number;
-  stepSize?: number;
-  accelerationCurve?: string;
-  smoothing?: boolean;
-  mode?: number;
   cwAction?: EncoderActionConfig;
   ccwAction?: EncoderActionConfig;
   pressAction?: EncoderActionConfig;
-  holdAction?: EncoderActionConfig;
-  pressRotateCwAction?: EncoderActionConfig;
-  pressRotateCcwAction?: EncoderActionConfig;
-  holdRotateCwAction?: EncoderActionConfig;
-  holdRotateCcwAction?: EncoderActionConfig;
 }
 
 export interface ComboAssignment {
   key1: number;
   key2: number;
-  action?: KeyAction;
+  action?: EncoderActionConfig;
 }
 
 export interface Profile {
@@ -103,26 +75,24 @@ export interface Profile {
   version: number;
   keys: KeyConfig[];
   encoders: EncoderConfig[];
-  layer1Keys?: KeyConfig[];
-  layer2Keys?: KeyConfig[];
-  combos?: ComboAssignment[];
 }
 
-export interface MacroStep {
-  action: string;
-  key?: string;
-  ms?: number;
+/** Macro step for on-device execution (matches firmware MacroStepConfig) */
+export interface MacroStepConfig {
+  stepType: number;  // 0=none, 1=delay, 2=keyPress, 3=text, 4=media
+  delayMs?: number;
+  key?: number;
+  modifiers?: number;
   text?: string;
-  value?: number;
-  vkCode?: number;
   mediaFunction?: number;
 }
 
+/** Macro asset saved in browser IndexedDB */
 export interface MacroAsset {
   macroId: string;
   name: string;
   tags: string[];
-  steps: MacroStep[];
+  steps: MacroStepConfig[];
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -144,6 +114,9 @@ export interface DeviceCaps {
   supportsLayers: boolean;
   supportsMacros: boolean;
   supportsEncoders: boolean;
+  maxKeys?: number;
+  maxEncoders?: number;
+  supportedActions?: number[];
 }
 
 export type ConnectionState =
@@ -155,14 +128,8 @@ export type ConnectionState =
   | 'hidConnected'
   | 'hidReady'
   | 'busyWithOtherHost'
-  | 'error'
-  | 'scanning'
-  | 'pairing'
-  | 'connecting'
-  | 'ready'
-  | 'reconnecting';
+  | 'error';
 
-/** Connection status from firmware getConnectionStatus (truthful) */
 export interface ConnectionStatus {
   configConnected: boolean;
   hidHostConnected: boolean;
@@ -173,7 +140,6 @@ export interface ConnectionStatus {
   reason: string;
 }
 
-/** For device manager UI (previously granted device) */
 export interface GrantedDeviceInfo {
   id: string;
   name: string;

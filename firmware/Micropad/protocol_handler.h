@@ -55,6 +55,11 @@ private:
     
     // Helper
     String createMessage(const String& type, uint32_t id, const JsonDocument& payload);
+
+public:
+    // Stats counters (updated from main loop)
+    uint32_t keyPressCount[12] = {0};
+    uint32_t encoderTurnCount[2] = {0};
 };
 
 #endif // PROTOCOL_HANDLER_H

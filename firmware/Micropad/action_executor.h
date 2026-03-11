@@ -20,6 +20,7 @@ private:
     void _executeText(const TextConfig& config);
     void _executeMedia(const MediaConfig& config);
     void _executeMouse(const MouseConfig& config);
+    void _executeMacro(const MacroConfig& config);
 };
 
 #endif // ACTION_EXECUTOR_H

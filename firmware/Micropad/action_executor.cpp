@@ -30,9 +30,12 @@ void ActionExecutor::execute(const Action& action) {
             _executeMouse(action.config.mouse);
             break;
             
+        case ACTION_MACRO:
+            _executeMacro(action.config.macro);
+            break;
+            
         case ACTION_NONE:
         default:
-            // Do nothing
             break;
     }
 }
@@ -104,4 +107,43 @@ void ActionExecutor::_executeMouse(const MouseConfig& config) {
     }
     
     DEBUG_PRINTF("Executed mouse action: %d\n", config.action);
+}
+
+void ActionExecutor::_executeMacro(const MacroConfig& config) {
+    if (config.stepCount == 0 || config.stepCount > MAX_MACRO_STEPS) return;
+    
+    for (uint8_t i = 0; i < config.stepCount; i++) {
+        const MacroStepConfig& step = config.steps[i];
+        
+        switch (step.stepType) {
+            case 1: // delay
+                if (step.delayMs > 0 && step.delayMs <= 5000) {
+                    delay(step.delayMs);
+                }
+                break;
+                
+            case 2: // keyPress
+                _bleKeyboard->sendKeyPress(step.key, step.modifiers);
+                delay(10);
+                break;
+                
+            case 3: // text
+                _bleKeyboard->sendText(step.text);
+                break;
+                
+            case 4: { // media
+                MediaConfig mc;
+                mc.function = static_cast<MediaFunction>(step.mediaFunction);
+                _executeMedia(mc);
+                break;
+            }
+                
+            default:
+                break;
+        }
+        
+        if (!_bleKeyboard->isHidReady()) break;
+    }
+    
+    DEBUG_PRINTF("Executed macro with %d steps\n", config.stepCount);
 }

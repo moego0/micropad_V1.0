@@ -29,9 +29,22 @@ interface DeviceStore {
   isWebBluetoothSupported: () => boolean;
 }
 
-async function fetchConnectionStatusAndUpdate(protocol: ProtocolHandler | null, set: (fn: (s: DeviceStore) => Partial<DeviceStore>) => void) {
-  if (!protocol) return;
+async function fetchPostConnectData(protocol: ProtocolHandler, set: (fn: (s: DeviceStore) => Partial<DeviceStore>) => void) {
   try {
+    const info = await protocol.getDeviceInfo();
+    if (info) {
+      const deviceInfo = info as unknown as DeviceInfo;
+      set((s) => ({
+        ...s,
+        deviceInfo,
+        deviceName: deviceInfo.deviceId || 'Micropad',
+        batteryLevel: deviceInfo.batteryLevel ?? null
+      }));
+    }
+    const caps = await protocol.getCaps();
+    if (caps) {
+      set((s) => ({ ...s, deviceCaps: caps }));
+    }
     const status = await protocol.getConnectionStatus();
     if (status) {
       set((s) => ({
@@ -41,7 +54,7 @@ async function fetchConnectionStatusAndUpdate(protocol: ProtocolHandler | null, 
       }));
     }
   } catch {
-    // ignore
+    // keep configConnected at minimum
   }
 }
 
@@ -80,34 +93,14 @@ export const useDeviceStore = create<DeviceStore>((set, get) => {
         return;
       }
       ble = new BleConnection({
-        onMessage: (json) => {
-          protocol?.handleMessage(json);
-        },
+        onMessage: (json) => { protocol?.handleMessage(json); },
         onStateChange: (state, error) => {
           set((s) => ({ ...s, connectionState: state, lastError: error ?? null }));
         },
         onConnected: async () => {
           set((s) => ({ ...s, lastError: null }));
           const pro = get().protocol;
-          if (pro) {
-            try {
-              const info = await pro.getDeviceInfo();
-              if (info) {
-                const deviceInfo = info as unknown as DeviceInfo;
-                set((s) => ({
-                  ...s,
-                  deviceInfo,
-                  deviceName: deviceInfo.deviceId || 'Micropad',
-                  batteryLevel: deviceInfo.batteryLevel ?? null
-                }));
-              }
-              const caps = await pro.getCaps();
-              set((s) => ({ ...s, deviceCaps: caps as unknown as DeviceCaps | null }));
-              await fetchConnectionStatusAndUpdate(pro, set);
-            } catch {
-              // keep configConnected at least
-            }
-          }
+          if (pro) await fetchPostConnectData(pro, set);
           const id = get().deviceInfo?.deviceId;
           if (id) {
             const settings = await loadSettings();
@@ -132,7 +125,7 @@ export const useDeviceStore = create<DeviceStore>((set, get) => {
         {
           onEvent: (msg) => {
             if (msg.event === 'profileChanged') {
-              // could refresh active profile id in profiles store
+              // Could refresh active profile id
             }
           }
         }
@@ -154,17 +147,14 @@ export const useDeviceStore = create<DeviceStore>((set, get) => {
       return b.requestDeviceAndConnect();
     },
 
-    requestAccess: async () => {
-      return get().connect();
-    },
+    requestAccess: async () => get().connect(),
 
     reconnectToGranted: async (device: BluetoothDevice) => {
       get().init();
       const b = get().ble;
       if (!b) return false;
       set((s) => ({ ...s, connectionState: 'reconnectingGrantedDevice', lastError: null }));
-      const ok = await b.connectToDevice(device);
-      return ok;
+      return b.connectToDevice(device);
     },
 
     disconnect: async () => {

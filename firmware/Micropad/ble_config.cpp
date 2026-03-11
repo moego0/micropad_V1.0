@@ -202,25 +202,40 @@ void BLEConfigService::handleChunkedMessage(const String& chunk) {
 }
 
 void BLEConfigService::sendChunked(const String& message) {
-    const uint16_t CHUNK_SIZE = 480;  // Leave room for JSON overhead
-    uint16_t totalChunks = (message.length() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    // Use base64 encoding for safe transport of JSON payloads
+    const uint16_t RAW_CHUNK_SIZE = 360;  // ~480 bytes after base64 expansion
+    uint16_t totalChunks = (message.length() + RAW_CHUNK_SIZE - 1) / RAW_CHUNK_SIZE;
     
-    DEBUG_PRINTF("Sending chunked message: %d bytes in %d chunks\n", message.length(), totalChunks);
+    DEBUG_PRINTF("Sending chunked message: %d bytes in %d chunks (base64)\n", message.length(), totalChunks);
     
     for (uint16_t i = 0; i < totalChunks; i++) {
-        uint16_t start = i * CHUNK_SIZE;
-        uint16_t len = min(CHUNK_SIZE, (uint16_t)(message.length() - start));
-        String data = message.substring(start, start + len);
+        uint16_t start = i * RAW_CHUNK_SIZE;
+        uint16_t len = min(RAW_CHUNK_SIZE, (uint16_t)(message.length() - start));
         
-        // Create chunk envelope
+        // Base64 encode the chunk payload
+        const unsigned char* src = (const unsigned char*)message.c_str() + start;
+        size_t b64Len = 0;
+        // Calculate required output size
+        mbedtls_base64_encode(NULL, 0, &b64Len, src, len);
+        char* b64Buf = (char*)malloc(b64Len + 1);
+        if (!b64Buf) {
+            DEBUG_PRINTLN("ERROR: malloc failed for base64 chunk");
+            break;
+        }
+        mbedtls_base64_encode((unsigned char*)b64Buf, b64Len + 1, &b64Len, src, len);
+        b64Buf[b64Len] = '\0';
+        
         String chunk = "{\"chunk\":" + String(i) + 
                       ",\"total\":" + String(totalChunks) + 
-                      ",\"data\":\"" + data + "\"}";
+                      ",\"dataB64\":\"" + String(b64Buf) + "\"}";
+        
+        free(b64Buf);
         
         _evtChar->setValue(chunk.c_str());
         _evtChar->notify();
         
-        yield();  // Allow BLE stack to run; avoid long blocking
+        yield();
+        if (i < totalChunks - 1) delay(20);
     }
     
     DEBUG_PRINTLN("Chunked message sent");

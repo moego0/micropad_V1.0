@@ -1,9 +1,9 @@
 /**
  * JSON protocol handler: request/response correlation and chunk reassembly.
- * Compatible with firmware protocol (getDeviceInfo, listProfiles, getProfile, setProfile, etc.).
+ * Compatible with firmware protocol v1.
  */
 
-import type { Profile } from '../models/types';
+import type { Profile, DeviceCaps } from '../models/types';
 
 export interface ProtocolMessage {
   v?: number;
@@ -28,14 +28,14 @@ export class ProtocolHandler {
   private chunkTotal = -1;
   private callbacks: ProtocolCallbacks;
 
-  constructor (
+  constructor(
     private sendRaw: (json: string) => Promise<void>,
     callbacks: ProtocolCallbacks
   ) {
     this.callbacks = callbacks;
   }
 
-  handleMessage (json: string): void {
+  handleMessage(json: string): void {
     try {
       if (json.includes('"chunk":') && json.includes('"total":')) {
         this.processChunk(json);
@@ -47,10 +47,10 @@ export class ProtocolHandler {
     }
   }
 
-  private processChunk (chunkJson: string): void {
+  private processChunk(chunkJson: string): void {
     let obj: { chunk?: number; total?: number; dataB64?: string; data?: string };
     try {
-      obj = JSON.parse(chunkJson) as { chunk?: number; total?: number; dataB64?: string; data?: string };
+      obj = JSON.parse(chunkJson) as typeof obj;
     } catch {
       return;
     }
@@ -66,8 +66,10 @@ export class ProtocolHandler {
       } catch {
         return;
       }
+    } else if (obj.data != null) {
+      payload = obj.data.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
     } else {
-      payload = (obj.data ?? '').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      return;
     }
 
     if (chunkIndex === 0) {
@@ -85,7 +87,7 @@ export class ProtocolHandler {
     this.processMessage(full);
   }
 
-  private processMessage (json: string): void {
+  private processMessage(json: string): void {
     const message = JSON.parse(json) as ProtocolMessage;
     if (message.type === 'response' || message.type === 'RESP') {
       const p = this.pending.get(message.id);
@@ -98,11 +100,11 @@ export class ProtocolHandler {
     }
   }
 
-  private nextRequestId (): number {
+  private nextRequestId(): number {
     return this.nextId++;
   }
 
-  private async sendRequest (message: Omit<ProtocolMessage, 'id' | 'type'>): Promise<ProtocolMessage | null> {
+  private async sendRequest(message: Omit<ProtocolMessage, 'id' | 'type'>): Promise<ProtocolMessage | null> {
     const id = this.nextRequestId();
     const full: ProtocolMessage = { ...message, id, v: 1, type: 'request' };
 
@@ -115,14 +117,8 @@ export class ProtocolHandler {
       }, 35000);
 
       this.pending.set(id, {
-        resolve: (m) => {
-          clearTimeout(timeout);
-          resolve(m);
-        },
-        reject: (e) => {
-          clearTimeout(timeout);
-          reject(e);
-        }
+        resolve: (m) => { clearTimeout(timeout); resolve(m); },
+        reject: (e) => { clearTimeout(timeout); reject(e); }
       });
 
       this.sendRaw(JSON.stringify(full)).catch((e) => {
@@ -134,33 +130,34 @@ export class ProtocolHandler {
     });
   }
 
-  async getDeviceInfo (): Promise<Record<string, unknown> | null> {
+  async getDeviceInfo(): Promise<Record<string, unknown> | null> {
     const res = await this.sendRequest({ cmd: 'getDeviceInfo', payload: {} });
     return (res?.payload ?? null) as Record<string, unknown> | null;
   }
 
-  async getCaps (): Promise<Record<string, unknown> | null> {
+  async getCaps(): Promise<DeviceCaps | null> {
     const res = await this.sendRequest({ cmd: 'getCaps', payload: {} });
-    return (res?.payload ?? null) as Record<string, unknown> | null;
+    return (res?.payload ?? null) as unknown as DeviceCaps | null;
   }
 
-  async listProfiles (): Promise<Profile[]> {
+  async listProfiles(): Promise<Profile[]> {
     const res = await this.sendRequest({ cmd: 'listProfiles', payload: {} });
     const arr = (res?.payload as { profiles?: Array<{ id: number; name: string; size?: number }> })?.profiles;
     if (!Array.isArray(arr)) return [];
     return arr.map((p) => ({ id: p.id, name: p.name ?? 'Unknown', version: 1, keys: [], encoders: [] }));
   }
 
-  async getProfile (profileId: number): Promise<Profile | null> {
+  async getProfile(profileId: number): Promise<Profile | null> {
     const res = await this.sendRequest({ cmd: 'getProfile', profileId });
     if (!res?.payload) return null;
     return res.payload as unknown as Profile;
   }
 
-  async setProfile (profile: Profile): Promise<boolean> {
+  async setProfile(profile: Profile): Promise<boolean> {
+    const deviceProfile = this.profileForDevice(profile);
     const res = await this.sendRequest({
       cmd: 'setProfile',
-      profile: this.profileForDevice(profile) as unknown as Record<string, unknown>
+      profile: deviceProfile as unknown as Record<string, unknown>
     });
     const payload = res?.payload as { success?: boolean; error?: string } | undefined;
     if (payload?.success === true) return true;
@@ -168,40 +165,39 @@ export class ProtocolHandler {
     return false;
   }
 
-  /** Strip fields the device doesn't use to reduce payload size and avoid parse errors */
-  private profileForDevice (profile: Profile): Record<string, unknown> {
-    const p = profile as unknown as Record<string, unknown>;
+  /** Convert profile to firmware-compatible format */
+  private profileForDevice(profile: Profile): Record<string, unknown> {
     return {
-      id: p.id,
-      name: p.name,
-      version: p.version,
-      keys: p.keys,
-      encoders: p.encoders
+      id: profile.id,
+      name: profile.name,
+      version: profile.version,
+      keys: profile.keys,
+      encoders: profile.encoders
     };
   }
 
-  async setActiveProfile (profileId: number): Promise<boolean> {
+  async setActiveProfile(profileId: number): Promise<boolean> {
     const res = await this.sendRequest({ cmd: 'setActiveProfile', profileId });
     return (res?.payload as { success?: boolean })?.success === true;
   }
 
-  async getActiveProfile (): Promise<number | null> {
+  async getActiveProfile(): Promise<number | null> {
     const res = await this.sendRequest({ cmd: 'getActiveProfile', payload: {} });
     const id = (res?.payload as { profileId?: number })?.profileId;
     return id != null ? id : null;
   }
 
-  async deleteProfile (profileId: number): Promise<boolean> {
+  async deleteProfile(profileId: number): Promise<boolean> {
     const res = await this.sendRequest({ cmd: 'deleteProfile', profileId });
     return (res?.payload as { success?: boolean })?.success === true;
   }
 
-  async getStats (): Promise<Record<string, unknown> | null> {
+  async getStats(): Promise<Record<string, unknown> | null> {
     const res = await this.sendRequest({ cmd: 'getStats', payload: {} });
     return (res?.payload ?? null) as Record<string, unknown> | null;
   }
 
-  async getConnectionStatus (): Promise<{
+  async getConnectionStatus(): Promise<{
     configConnected: boolean;
     hidHostConnected: boolean;
     hidReady: boolean;
@@ -222,5 +218,15 @@ export class ProtocolHandler {
       canAcceptConfigConnection: !!p.canAcceptConfigConnection,
       reason: (p.reason as string) ?? 'unknown'
     };
+  }
+
+  async factoryReset(): Promise<boolean> {
+    const res = await this.sendRequest({ cmd: 'factoryReset', payload: {} });
+    return (res?.payload as { success?: boolean })?.success === true;
+  }
+
+  async reboot(): Promise<boolean> {
+    const res = await this.sendRequest({ cmd: 'reboot', payload: {} });
+    return (res?.payload as { success?: boolean })?.success === true;
   }
 }

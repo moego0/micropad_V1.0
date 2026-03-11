@@ -175,15 +175,13 @@ void processCombos() {
 void processKeys() {
     Profile* currentProfile = profileManager.getCurrentProfile();
     
-    // Check each key for press events
     for (uint8_t i = 0; i < MATRIX_KEYS; i++) {
         if (matrix.justPressed(i)) {
             DEBUG_PRINTF("Key %d pressed\n", i);
+            protocolHandler.keyPressCount[i]++;
             
-            // Get action for this key
             const Action& action = currentProfile->keys[i].action;
             
-            // Check if this is a profile switch action
             if (action.type == ACTION_PROFILE) {
                 uint8_t targetProfile = action.config.profile.profileId;
                 if (profileManager.profileExists(targetProfile)) {
@@ -191,13 +189,8 @@ void processKeys() {
                     DEBUG_PRINTF("Switched to profile %d\n", targetProfile);
                 }
             } else if (action.type != ACTION_NONE) {
-                // Execute normal action
                 actionExecutor.execute(action);
             }
-        }
-        
-        if (matrix.justReleased(i)) {
-            DEBUG_PRINTF("Key %d released\n", i);
         }
     }
 }
@@ -208,35 +201,32 @@ void processKeys() {
 void processEncoders() {
     Profile* currentProfile = profileManager.getCurrentProfile();
     
-    // Encoder 1
     int8_t delta1 = encoder1.getDelta();
     if (delta1 != 0) {
         DEBUG_PRINTF("Encoder 1 turned: %d\n", delta1);
+        protocolHandler.encoderTurnCount[0]++;
         
         if (delta1 > 0) {
-            // Clockwise
             actionExecutor.execute(currentProfile->encoders[0].cwAction);
         } else {
-            // Counter-clockwise
             actionExecutor.execute(currentProfile->encoders[0].ccwAction);
         }
     }
     
     if (encoder1.isSWJustPressed()) {
         DEBUG_PRINTLN("Encoder 1 pressed");
+        protocolHandler.keyPressCount[0]++; // count encoder presses too
         actionExecutor.execute(currentProfile->encoders[0].pressAction);
     }
     
-    // Encoder 2
     int8_t delta2 = encoder2.getDelta();
     if (delta2 != 0) {
         DEBUG_PRINTF("Encoder 2 turned: %d\n", delta2);
+        protocolHandler.encoderTurnCount[1]++;
         
         if (delta2 > 0) {
-            // Clockwise
             actionExecutor.execute(currentProfile->encoders[1].cwAction);
         } else {
-            // Counter-clockwise
             actionExecutor.execute(currentProfile->encoders[1].ccwAction);
         }
     }

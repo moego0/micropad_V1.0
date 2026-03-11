@@ -61,6 +61,23 @@ struct ProfileSwitchConfig {
     uint8_t profileId;
 };
 
+// Macro step (embedded in profile for on-device execution)
+#define MAX_MACRO_STEPS 16
+
+struct MacroStepConfig {
+    uint8_t stepType;  // 0=none, 1=delay, 2=keyPress, 3=text, 4=media
+    uint16_t delayMs;
+    uint8_t key;
+    uint8_t modifiers;
+    char text[32];
+    uint8_t mediaFunction;
+};
+
+struct MacroConfig {
+    uint8_t stepCount;
+    MacroStepConfig steps[MAX_MACRO_STEPS];
+};
+
 // Generic action structure
 struct Action {
     ActionType type;
@@ -70,6 +87,7 @@ struct Action {
         MediaConfig media;
         MouseConfig mouse;
         ProfileSwitchConfig profile;
+        MacroConfig macro;
     } config;
 };
 

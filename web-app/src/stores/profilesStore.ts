@@ -1,15 +1,16 @@
 import { create } from 'zustand';
-import type { Profile, KeyConfig, ComboAssignment } from '../models/types';
+import type { Profile, KeyConfig, EncoderActionConfig } from '../models/types';
+import { ActionType } from '../models/types';
 import { useDeviceStore } from './deviceStore';
 import * as profileStorage from '../storage/profileStorage';
 
 const KEY_COUNT = 12;
 
-function ensureKeys (profile: Profile): void {
+function ensureKeys(profile: Profile): void {
   while (profile.keys.length < KEY_COUNT) {
     profile.keys.push({
       index: profile.keys.length,
-      type: 0,
+      type: ActionType.None,
       modifiers: 0,
       key: 0,
       function: 0,
@@ -21,56 +22,30 @@ function ensureKeys (profile: Profile): void {
   profile.keys.forEach((k, i) => { k.index = i; });
 }
 
-function ensureLayerKeys (profile: Profile): void {
-  if (!profile.layer1Keys) {
-    profile.layer1Keys = Array.from({ length: KEY_COUNT }, (_, i) => ({
-      index: i,
-      type: 0,
-      modifiers: 0,
-      key: 0,
-      function: 0,
-      action: 0,
-      value: 0,
-      profileId: 0
-    }));
-  }
-  if (!profile.layer2Keys) {
-    profile.layer2Keys = Array.from({ length: KEY_COUNT }, (_, i) => ({
-      index: i,
-      type: 0,
-      modifiers: 0,
-      key: 0,
-      function: 0,
-      action: 0,
-      value: 0,
-      profileId: 0
-    }));
-  }
-}
-
-function ensureEncoders (profile: Profile): void {
+function ensureEncoders(profile: Profile): void {
   if (!profile.encoders) profile.encoders = [];
   while (profile.encoders.length < 2) {
     profile.encoders.push({
       index: profile.encoders.length,
-      acceleration: false,
-      stepsPerDetent: 1,
-      cwAction: { type: 'none' },
-      ccwAction: { type: 'none' },
-      pressAction: { type: 'none' }
+      acceleration: true,
+      stepsPerDetent: 4,
+      cwAction: { type: ActionType.None },
+      ccwAction: { type: ActionType.None },
+      pressAction: { type: ActionType.None }
     });
   }
 }
 
-function cloneProfile (p: Profile): Profile {
+function cloneProfile(p: Profile): Profile {
   return JSON.parse(JSON.stringify(p));
 }
+
+const ENCODER_NONE: EncoderActionConfig = { type: ActionType.None };
 
 interface ProfilesStore {
   profiles: Profile[];
   selectedProfile: Profile | null;
   editingProfile: Profile | null;
-  selectedLayerIndex: number;
   selectedKeySlotIndex: number;
   activeProfileId: number | null;
   deviceCapsText: string;
@@ -78,13 +53,12 @@ interface ProfilesStore {
   isProfilesLoading: boolean;
   isPushInProgress: boolean;
   pushStepText: string;
+  lastSyncTime: string | null;
   loadProfiles: () => Promise<void>;
   selectProfile: (p: Profile | null) => void;
   setEditingProfile: (p: Profile | null) => void;
-  setSelectedLayerIndex: (i: number) => void;
   setSelectedKeySlotIndex: (i: number) => void;
-  getKeySlotsForLayer: () => KeyConfig[];
-  refreshKeySlots: () => void;
+  getKeySlots: () => KeyConfig[];
   updateKeyAt: (keyIndex: number, config: Partial<KeyConfig>) => void;
   pushToDevice: () => Promise<void>;
   pullFromDevice: () => Promise<void>;
@@ -96,25 +70,22 @@ interface ProfilesStore {
   deleteFromDevice: () => Promise<void>;
   setActiveProfileOnDevice: () => Promise<void>;
   setStatus: (s: string) => void;
-  addCombo: () => void;
-  removeCombo: (c: ComboAssignment) => void;
-  updateComboKeys: (c: ComboAssignment, key1: number, key2: number) => void;
-  getCombos: () => ComboAssignment[];
   applyEncoderPreset: (encoderIndex: number, preset: string) => void;
+  renameProfile: (name: string) => void;
 }
 
 export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   profiles: [],
   selectedProfile: null,
   editingProfile: null,
-  selectedLayerIndex: 0,
   selectedKeySlotIndex: -1,
   activeProfileId: null,
   deviceCapsText: '',
-  statusText: 'Click Refresh to load profiles',
+  statusText: '',
   isProfilesLoading: false,
   isPushInProgress: false,
   pushStepText: '',
+  lastSyncTime: null,
 
   loadProfiles: async () => {
     set((s) => ({ ...s, isProfilesLoading: true }));
@@ -135,15 +106,15 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
         const activeId = await sync.getActiveProfileId();
         const caps = await sync.getCaps();
         const capsText = caps
-          ? `Device: ${list.length}/${caps.maxProfiles} slots, ${caps.freeBytes} bytes free`
+          ? `${list.length}/${caps.maxProfiles} profiles · ${Math.round(caps.freeBytes / 1024)}KB free`
           : '';
         set((s) => ({ ...s, profiles: list, activeProfileId: activeId ?? null, deviceCapsText: capsText }));
       } else {
         set((s) => ({ ...s, profiles: list }));
       }
-      set((s) => ({ ...s, statusText: `Loaded ${list.length} profile(s)` }));
+      set((s) => ({ ...s, statusText: list.length > 0 ? `${list.length} profile(s) loaded` : 'No profiles yet. Create one to get started.' }));
     } catch (e) {
-      set((s) => ({ ...s, statusText: `Failed: ${(e as Error).message}` }));
+      set((s) => ({ ...s, statusText: `Could not load profiles: ${(e as Error).message}` }));
     } finally {
       set((s) => ({ ...s, isProfilesLoading: false }));
     }
@@ -154,7 +125,6 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     if (selectedProfile) {
       const full = cloneProfile(selectedProfile);
       ensureKeys(full);
-      ensureLayerKeys(full);
       ensureEncoders(full);
       set((s) => ({ ...s, editingProfile: full }));
     } else {
@@ -163,42 +133,23 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   },
 
   setEditingProfile: (editingProfile) => set((s) => ({ ...s, editingProfile })),
-  setSelectedLayerIndex: (selectedLayerIndex) => set((s) => ({ ...s, selectedLayerIndex })),
   setSelectedKeySlotIndex: (selectedKeySlotIndex) => set((s) => ({ ...s, selectedKeySlotIndex })),
 
-  getKeySlotsForLayer: () => {
-    const { editingProfile, selectedLayerIndex } = get();
+  getKeySlots: () => {
+    const { editingProfile } = get();
     if (!editingProfile) return [];
     ensureKeys(editingProfile);
-    ensureLayerKeys(editingProfile);
-    const source =
-      selectedLayerIndex === 1
-        ? editingProfile.layer1Keys
-        : selectedLayerIndex === 2
-          ? editingProfile.layer2Keys
-          : editingProfile.keys;
-    const arr = source ?? editingProfile.keys;
     const out: KeyConfig[] = [];
     for (let i = 0; i < KEY_COUNT; i++) {
-      out.push(arr[i] ?? { index: i, type: 0, modifiers: 0, key: 0, function: 0, action: 0, value: 0, profileId: 0 });
+      out.push(editingProfile.keys[i] ?? { index: i, type: 0, modifiers: 0, key: 0, function: 0, action: 0, value: 0, profileId: 0 });
     }
     return out;
   },
 
-  refreshKeySlots: () => {
-    // No-op; key slots are derived via getKeySlotsForLayer in component
-  },
-
   updateKeyAt: (keyIndex, config) => {
-    const { editingProfile, selectedLayerIndex } = get();
+    const { editingProfile } = get();
     if (!editingProfile) return;
-    const source =
-      selectedLayerIndex === 1
-        ? editingProfile.layer1Keys
-        : selectedLayerIndex === 2
-          ? editingProfile.layer2Keys
-          : editingProfile.keys;
-    const arr = source ?? editingProfile.keys;
+    const arr = editingProfile.keys;
     if (keyIndex >= 0 && keyIndex < arr.length) {
       arr[keyIndex] = { ...arr[keyIndex], ...config, index: keyIndex };
       set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
@@ -209,21 +160,26 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     const { editingProfile } = get();
     if (!editingProfile) return;
     const sync = useDeviceStore.getState().syncService;
-    if (!sync) return;
-    set((s) => ({ ...s, isPushInProgress: true, pushStepText: 'Preparing...' }));
+    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
+    set((s) => ({ ...s, isPushInProgress: true, pushStepText: 'Preparing…' }));
     try {
       await new Promise((r) => setTimeout(r, 120));
-      set((s) => ({ ...s, pushStepText: 'Sending to device...' }));
+      set((s) => ({ ...s, pushStepText: 'Sending to device…' }));
       const ok = await sync.pushProfile(editingProfile);
-      set((s) => ({ ...s, pushStepText: ok ? 'Done' : 'Failed' }));
       if (ok) {
         await sync.saveProfileLocally(editingProfile);
-        set((s) => ({ ...s, statusText: `Pushed '${editingProfile.name}' to device` }));
+        const now = new Date().toLocaleTimeString();
+        set((s) => ({
+          ...s,
+          pushStepText: 'Saved!',
+          statusText: `"${editingProfile.name}" saved to device`,
+          lastSyncTime: now
+        }));
       } else {
         set((s) => ({
           ...s,
-          statusText:
-            'Device did not respond or returned an error. Disconnect on the Devices page, reconnect, then try again. If the profile is large, try a smaller one first.'
+          pushStepText: 'Failed',
+          statusText: 'Device did not respond. Try disconnecting and reconnecting on the Devices page.'
         }));
       }
     } catch (e) {
@@ -231,10 +187,12 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
       set((s) => ({
         ...s,
         pushStepText: 'Error',
-        statusText: msg.includes('Not connected') ? msg : `Failed: ${msg}`
+        statusText: msg.includes('Not connected')
+          ? 'Not connected. Open the Devices page to connect first.'
+          : `Save failed: ${msg}`
       }));
     } finally {
-      set((s) => ({ ...s, isPushInProgress: false, pushStepText: '' }));
+      setTimeout(() => set((s) => ({ ...s, isPushInProgress: false, pushStepText: '' })), 1500);
     }
   },
 
@@ -242,36 +200,36 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     const { selectedProfile } = get();
     if (!selectedProfile) return;
     const sync = useDeviceStore.getState().syncService;
-    if (!sync) return;
+    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
     try {
+      set((s) => ({ ...s, statusText: 'Loading from device…' }));
       const full = await sync.pullProfile(selectedProfile.id);
       if (!full) {
-        set((s) => ({
-          ...s,
-          statusText:
-            'Device did not respond. Disconnect on the Devices page, reconnect, then try Pull again.'
-        }));
+        set((s) => ({ ...s, statusText: 'Device did not respond. Try disconnecting and reconnecting.' }));
         return;
       }
       ensureKeys(full);
-      ensureLayerKeys(full);
       ensureEncoders(full);
       await sync.saveProfileLocally(full);
       const list = get().profiles;
       const idx = list.findIndex((p) => p.id === full.id);
       const newList = idx >= 0 ? [...list.slice(0, idx), full, ...list.slice(idx + 1)] : [...list, full].sort((a, b) => a.id - b.id);
+      const now = new Date().toLocaleTimeString();
       set((s) => ({
         ...s,
         profiles: newList,
         selectedProfile: full,
         editingProfile: cloneProfile(full),
-        statusText: `Pulled '${full.name}' from device`
+        statusText: `"${full.name}" loaded from device`,
+        lastSyncTime: now
       }));
     } catch (e) {
       const msg = (e as Error).message;
       set((s) => ({
         ...s,
-        statusText: msg.includes('Not connected') ? msg : `Pull failed: ${msg}`
+        statusText: msg.includes('Not connected')
+          ? 'Not connected. Open the Devices page to connect first.'
+          : `Load failed: ${msg}`
       }));
     }
   },
@@ -283,7 +241,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     const list = get().profiles;
     const idx = list.findIndex((p) => p.id === editingProfile.id);
     const newList = idx >= 0 ? [...list.slice(0, idx), editingProfile, ...list.slice(idx + 1)] : [...list, editingProfile].sort((a, b) => a.id - b.id);
-    set((s) => ({ ...s, profiles: newList, statusText: `Saved '${editingProfile.name}' locally` }));
+    set((s) => ({ ...s, profiles: newList, statusText: `"${editingProfile.name}" saved locally` }));
   },
 
   createProfile: async () => {
@@ -293,13 +251,12 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     while (used.has(nextId) && nextId < 64) nextId++;
     const profile: Profile = {
       id: nextId,
-      name: 'New profile',
+      name: `Profile ${nextId + 1}`,
       version: 1,
       keys: [],
       encoders: []
     };
     ensureKeys(profile);
-    ensureLayerKeys(profile);
     ensureEncoders(profile);
     await profileStorage.saveProfile(profile);
     const newList = [...list, profile].sort((a, b) => a.id - b.id);
@@ -308,7 +265,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
       profiles: newList,
       selectedProfile: profile,
       editingProfile: cloneProfile(profile),
-      statusText: "Created profile. Edit and push to device."
+      statusText: 'New profile created. Assign keys and save to device.'
     }));
   },
 
@@ -325,7 +282,6 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
       encoders: []
     };
     ensureKeys(profile);
-    ensureLayerKeys(profile);
     ensureEncoders(profile);
     await profileStorage.saveProfile(profile);
     const newList = [...list, profile].sort((a, b) => a.id - b.id);
@@ -334,7 +290,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
       profiles: newList,
       selectedProfile: profile,
       editingProfile: cloneProfile(profile),
-      statusText: `Created preset '${presetName}'. Edit keys and push to device.`
+      statusText: `"${presetName}" created. Customize keys in the Profiles tab.`
     }));
   },
 
@@ -346,7 +302,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     while (used.has(nextId) && nextId < 64) nextId++;
     const copy = cloneProfile(editingProfile);
     copy.id = nextId;
-    copy.name = 'Copy of ' + (editingProfile.name || 'Unnamed');
+    copy.name = `Copy of ${editingProfile.name || 'Unnamed'}`;
     copy.version = 1;
     await profileStorage.saveProfile(copy);
     const newList = [...profiles, copy].sort((a, b) => a.id - b.id);
@@ -355,7 +311,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
       profiles: newList,
       selectedProfile: copy,
       editingProfile: cloneProfile(copy),
-      statusText: `Duplicated as '${copy.name}'`
+      statusText: `Duplicated as "${copy.name}"`
     }));
   },
 
@@ -370,7 +326,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
       profiles: newList,
       selectedProfile: next,
       editingProfile: next ? cloneProfile(next) : null,
-      statusText: 'Profile deleted from PC'
+      statusText: 'Profile deleted locally'
     }));
   },
 
@@ -378,7 +334,7 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     const { selectedProfile, profiles } = get();
     if (!selectedProfile) return;
     const sync = useDeviceStore.getState().syncService;
-    if (!sync) return;
+    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
     try {
       const ok = await sync.deleteProfileFromDevice(selectedProfile.id);
       if (ok) {
@@ -392,14 +348,11 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
           statusText: 'Profile deleted from device'
         }));
       } else {
-        set((s) => ({
-          ...s,
-          statusText: 'Device did not respond. Disconnect, reconnect, then try again.'
-        }));
+        set((s) => ({ ...s, statusText: 'Device did not respond. Try disconnecting and reconnecting.' }));
       }
     } catch (e) {
       const msg = (e as Error).message;
-      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? msg : `Failed: ${msg}` }));
+      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? 'Not connected. Open the Devices page first.' : `Delete failed: ${msg}` }));
     }
   },
 
@@ -407,73 +360,57 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
     const { selectedProfile } = get();
     if (!selectedProfile) return;
     const sync = useDeviceStore.getState().syncService;
-    if (!sync) return;
+    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
     try {
       const ok = await sync.setActiveProfile(selectedProfile.id);
-      if (ok) set((s) => ({ ...s, activeProfileId: selectedProfile.id, statusText: `Activated: ${selectedProfile.name}` }));
-      else set((s) => ({ ...s, statusText: 'Device did not respond. Disconnect, reconnect, then try again.' }));
+      if (ok) set((s) => ({ ...s, activeProfileId: selectedProfile.id, statusText: `"${selectedProfile.name}" is now the active profile` }));
+      else set((s) => ({ ...s, statusText: 'Device did not respond. Try disconnecting and reconnecting.' }));
     } catch (e) {
       const msg = (e as Error).message;
-      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? msg : `Failed: ${msg}` }));
+      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? 'Not connected.' : `Failed: ${msg}` }));
     }
   },
 
   setStatus: (statusText) => set((s) => ({ ...s, statusText })),
 
-  addCombo: () => {
+  renameProfile: (name: string) => {
     const { editingProfile } = get();
     if (!editingProfile) return;
-    const combos = editingProfile.combos ?? [];
-    editingProfile.combos = [...combos, { key1: 0, key2: 1 }];
+    editingProfile.name = name;
     set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
   },
-
-  removeCombo: (combo) => {
-    const { editingProfile } = get();
-    if (!editingProfile?.combos) return;
-    editingProfile.combos = editingProfile.combos.filter((c) => c !== combo);
-    set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
-  },
-
-  updateComboKeys: (combo, key1, key2) => {
-    combo.key1 = key1;
-    combo.key2 = key2;
-    set((s) => ({ ...s, editingProfile: s.editingProfile ? { ...s.editingProfile } : null }));
-  },
-
-  getCombos: () => get().editingProfile?.combos ?? [],
 
   applyEncoderPreset: (encoderIndex, preset) => {
     const { editingProfile } = get();
     if (!editingProfile?.encoders?.[encoderIndex]) return;
     const enc = editingProfile.encoders[encoderIndex];
-    enc.cwAction = enc.cwAction ?? { type: 'none' };
-    enc.ccwAction = enc.ccwAction ?? { type: 'none' };
-    enc.pressAction = enc.pressAction ?? { type: 'none' };
     switch (preset) {
       case 'Volume':
-        enc.cwAction = { type: 'volume', mediaFunction: 0 };
-        enc.ccwAction = { type: 'volume', mediaFunction: 1 };
-        enc.pressAction = { type: 'media', mediaFunction: 2 };
+        enc.cwAction = { type: ActionType.Media, function: MediaFunction.VolumeUp };
+        enc.ccwAction = { type: ActionType.Media, function: MediaFunction.VolumeDown };
+        enc.pressAction = { type: ActionType.Media, function: MediaFunction.Mute };
         break;
       case 'Scroll':
-        enc.cwAction = { type: 'scrollV', value: -1 };
-        enc.ccwAction = { type: 'scrollV', value: 1 };
-        enc.pressAction = { type: 'none' };
+        enc.cwAction = { type: ActionType.Mouse, action: MouseAction.ScrollUp, value: 1 };
+        enc.ccwAction = { type: ActionType.Mouse, action: MouseAction.ScrollDown, value: 1 };
+        enc.pressAction = ENCODER_NONE;
         break;
       case 'Zoom':
-        enc.cwAction = { type: 'hotkey', modifiers: 0x01, key: 0x35 };
-        enc.ccwAction = { type: 'hotkey', modifiers: 0x01, key: 0x36 };
-        enc.pressAction = { type: 'none' };
+        enc.cwAction = { type: ActionType.Hotkey, modifiers: 0x01, key: 0x2E };  // Ctrl + ]
+        enc.ccwAction = { type: ActionType.Hotkey, modifiers: 0x01, key: 0x2D };  // Ctrl + [
+        enc.pressAction = ENCODER_NONE;
         break;
       case 'Media':
-        enc.cwAction = { type: 'media', mediaFunction: 4 };
-        enc.ccwAction = { type: 'media', mediaFunction: 5 };
-        enc.pressAction = { type: 'media', mediaFunction: 3 };
+        enc.cwAction = { type: ActionType.Media, function: MediaFunction.Next };
+        enc.ccwAction = { type: ActionType.Media, function: MediaFunction.Prev };
+        enc.pressAction = { type: ActionType.Media, function: MediaFunction.PlayPause };
         break;
       default:
-        enc.cwAction = enc.ccwAction = enc.pressAction = { type: 'none' };
+        enc.cwAction = enc.ccwAction = enc.pressAction = { ...ENCODER_NONE };
     }
     set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
   }
 }));
+
+// Re-export MediaFunction / MouseAction for encoder presets
+import { MediaFunction, MouseAction } from '../models/types';

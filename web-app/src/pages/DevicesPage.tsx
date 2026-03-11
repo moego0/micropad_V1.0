@@ -1,28 +1,24 @@
 import { useEffect } from 'react';
 import { useDeviceStore } from '../stores/deviceStore';
 
-function stateLabel(state: string): string {
+function connectionLabel(state: string, _status: ReturnType<typeof useDeviceStore.getState>['connectionStatus']): { text: string; color: string; detail: string } {
   switch (state) {
-    case 'idle':
-      return 'Idle';
-    case 'requestingAccess':
-      return 'Requesting access…';
-    case 'reconnectingGrantedDevice':
-      return 'Reconnecting…';
-    case 'connectingGatt':
-      return 'Connecting GATT…';
-    case 'configConnected':
-      return 'Config channel connected';
-    case 'hidConnected':
-      return 'HID host connected';
     case 'hidReady':
-      return 'Ready (config + HID)';
+      return { text: 'Connected', color: 'text-emerald-400', detail: 'Your Micropad is connected as a keyboard and ready for configuration.' };
+    case 'hidConnected':
+      return { text: 'Connected to PC', color: 'text-emerald-400', detail: 'Micropad is connected to your PC as a keyboard. Configuration channel is also available.' };
+    case 'configConnected':
+      return { text: 'Configuration mode', color: 'text-amber-400', detail: 'Configuration channel connected. The Micropad is not paired to a PC as a keyboard yet — keys and encoders will work once paired.' };
     case 'busyWithOtherHost':
-      return 'Device busy with PC';
+      return { text: 'Busy with PC', color: 'text-amber-400', detail: 'The Micropad is connected to a PC but the configuration channel is not available. This usually resolves when reconnecting.' };
+    case 'requestingAccess':
+    case 'reconnectingGrantedDevice':
+    case 'connectingGatt':
+      return { text: 'Connecting…', color: 'text-sky-400', detail: 'Establishing connection to your Micropad…' };
     case 'error':
-      return 'Error';
+      return { text: 'Connection error', color: 'text-red-400', detail: '' };
     default:
-      return state;
+      return { text: 'Not connected', color: 'text-text-tertiary', detail: 'Connect your Micropad to configure keys, encoders, and profiles.' };
   }
 }
 
@@ -36,46 +32,29 @@ export default function DevicesPage() {
   const connectionStatus = useDeviceStore((s) => s.connectionStatus);
   const lastError = useDeviceStore((s) => s.lastError);
   const deviceInfo = useDeviceStore((s) => s.deviceInfo);
+  const deviceCaps = useDeviceStore((s) => s.deviceCaps);
   const grantedDevices = useDeviceStore((s) => s.grantedDevices);
-  const currentBleDevice = useDeviceStore((s) => s.ble?.currentDevice ?? null);
   const isSupported = useDeviceStore((s) => s.isWebBluetoothSupported);
 
-  useEffect(() => {
-    init();
-  }, [init]);
+  useEffect(() => { init(); }, [init]);
 
-  const isConnecting =
-    connectionState === 'requestingAccess' ||
-    connectionState === 'reconnectingGrantedDevice' ||
-    connectionState === 'connectingGatt';
-  const isConfigConnected =
-    connectionState === 'configConnected' ||
-    connectionState === 'hidConnected' ||
-    connectionState === 'hidReady';
-  const isFullyReady = connectionState === 'hidReady';
-  const isBusyWithHost = connectionState === 'busyWithOtherHost';
-
-  const handleRequestAccess = () => {
-    requestAccess();
-  };
-
-  const handleReconnect = (device: BluetoothDevice) => {
-    reconnectToGranted(device);
-  };
+  const isConnecting = ['requestingAccess', 'reconnectingGrantedDevice', 'connectingGatt'].includes(connectionState);
+  const isConfigConnected = ['configConnected', 'hidConnected', 'hidReady'].includes(connectionState);
+  const { text: statusText, color: statusColor, detail: statusDetail } = connectionLabel(connectionState, connectionStatus);
 
   if (!isSupported()) {
     return (
-      <div className="p-6 max-w-xl animate-fade-in">
-        <h1 className="text-2xl font-bold text-text-primary mb-2">Bluetooth Devices</h1>
-        <div className="h-1 w-12 bg-brand-blue rounded mb-4" />
-        <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-6 text-text-secondary shadow-xl shadow-black/40">
-          <p className="font-medium text-text-primary mb-2">Web Bluetooth not supported</p>
-          <p>
-            This browser does not support Web Bluetooth. Use Chrome, Edge, or Opera on desktop (or Chrome on Android)
-            with HTTPS. Safari and Firefox do not support device connection.
+      <div className="p-6 max-w-2xl animate-fade-in">
+        <h1 className="text-2xl font-bold text-text-primary mb-2">Connect Your Micropad</h1>
+        <div className="h-1 w-12 bg-brand-blue rounded mb-6" />
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
+          <p className="font-medium text-text-primary mb-2">Browser not supported</p>
+          <p className="text-text-secondary text-sm">
+            This browser doesn't support Bluetooth connections. Please use <strong>Chrome</strong>, <strong>Edge</strong>, or <strong>Opera</strong> on desktop.
+            Safari and Firefox are not supported.
           </p>
           <p className="mt-3 text-sm text-text-tertiary">
-            You can still use the app offline to edit profiles and macros, and use Export/Import to move data.
+            You can still edit profiles and macros offline, and use Export/Import in Settings to move data.
           </p>
         </div>
       </div>
@@ -83,153 +62,177 @@ export default function DevicesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <h1 className="text-2xl font-bold text-text-primary mb-2">Bluetooth Devices</h1>
-      <div className="h-1 w-12 bg-brand-blue rounded mb-4" />
-      <p className="text-text-secondary mb-6 max-w-2xl">
-        Connect to your Micropad over Bluetooth. Use <span className="font-semibold text-text-primary">Reconnect</span> for
-        a device you’ve already allowed, or <span className="font-semibold text-text-primary">Request access</span> to
-        open the browser pairing dialog (user gesture required).
-      </p>
-      <p className="text-sm text-amber-600 dark:text-amber-400 mb-4 max-w-2xl rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-        <strong>If the Micropad is already connected to the PC</strong> (as a keyboard), use <strong>Reconnect</strong> below—not Request access—to connect from the browser. Request access may not show the device when it’s paired to the PC. Ensure the firmware allows 2 BLE connections (see MULTI_CONNECTION.md).
-      </p>
+    <div className="p-6 space-y-6 max-w-3xl animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary mb-2">Connect Your Micropad</h1>
+        <div className="h-1 w-12 bg-brand-blue rounded mb-4" />
+      </div>
 
-      {/* Connection status card */}
-      <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
-        <h2 className="font-semibold text-text-primary mb-3">Connection status</h2>
-        <p className="text-sm text-text-secondary mb-2">
-          <span className="font-medium text-text-primary">State:</span> {stateLabel(connectionState)}
-        </p>
-        {connectionStatus && (
-          <div className="text-xs text-text-tertiary space-y-1 mb-3">
-            <p>Config channel: {connectionStatus.configConnected ? 'Yes' : 'No'}</p>
-            <p>HID host connected: {connectionStatus.hidHostConnected ? 'Yes' : 'No'}</p>
-            <p>HID ready (reports enabled): {connectionStatus.hidReady ? 'Yes' : 'No'}</p>
-            <p>Can accept config: {connectionStatus.canAcceptConfigConnection ? 'Yes' : 'No'}</p>
-            <p>Reason: {connectionStatus.reason}</p>
+      {/* Connection status */}
+      <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-6 shadow-lg shadow-black/30">
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`h-3 w-3 rounded-full ${isConfigConnected ? 'bg-emerald-500 animate-pulse' : isConnecting ? 'bg-sky-500 animate-pulse' : 'bg-surface-input'}`} />
+          <h2 className={`text-lg font-semibold ${statusColor}`}>{statusText}</h2>
+        </div>
+        {statusDetail && <p className="text-sm text-text-secondary mb-4">{statusDetail}</p>}
+
+        {lastError && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 mb-4">
+            <p className="text-sm text-red-400">{lastError}</p>
+            {(lastError.includes('busy') || lastError.includes('PC') || lastError.includes('GATT')) && (
+              <p className="text-xs text-text-tertiary mt-2">
+                If the device is paired to your PC: open Windows Bluetooth settings, find Micropad, and disconnect it. Then try connecting again here.
+              </p>
+            )}
           </div>
         )}
-        {isBusyWithHost && (
-          <p className="text-sm text-amber-500 mb-3">
-            Config channel unavailable while the device is connected to the PC as an input device. Disconnect from
-            Windows Bluetooth or wait until the PC disconnects to configure from the browser.
-          </p>
-        )}
-        {isConfigConnected && !isFullyReady && !isBusyWithHost && (
-          <p className="text-sm text-text-tertiary mb-3">
-            Config channel is connected. Keys and encoders will only send input to the PC when the Micropad is also
-            connected as a HID device (e.g. paired in Windows).
-          </p>
-        )}
-        {isFullyReady && (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-3">
-            You can edit profiles here and use the device as a keyboard/encoder on the PC at the same time.
-          </p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleRequestAccess}
-            disabled={isConnecting}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-emerald-500/40 transition"
-          >
-            Request access
-          </button>
-          <button
-            onClick={() => {
-              const first = grantedDevices[0];
-              if (first?.device) reconnectToGranted(first.device);
-            }}
-            disabled={isConnecting || grantedDevices.length === 0 || isConfigConnected}
-            title={grantedDevices.length === 0 ? 'Connect once with Request access to enable Reconnect' : undefined}
-            className="px-5 py-2.5 bg-brand-blue hover:bg-brand-blue/90 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-brand-blue/40 transition"
-          >
-            Reconnect
-          </button>
-          <button
-            onClick={() => disconnect()}
-            disabled={!isConfigConnected}
-            className="px-4 py-2 bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white rounded-full font-medium text-sm shadow-md shadow-red-500/40 transition"
-          >
-            Disconnect
-          </button>
+
+        <div className="flex flex-wrap gap-3">
+          {!isConfigConnected && (
+            <>
+              <button
+                onClick={() => requestAccess()}
+                disabled={isConnecting}
+                className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-emerald-500/30 transition"
+              >
+                {isConnecting ? 'Connecting…' : 'Connect Micropad'}
+              </button>
+              {grantedDevices.length > 0 && (
+                <button
+                  onClick={() => {
+                    const first = grantedDevices[0];
+                    if (first?.device) reconnectToGranted(first.device);
+                  }}
+                  disabled={isConnecting}
+                  className="px-5 py-2.5 bg-brand-blue hover:bg-brand-blue/90 disabled:opacity-50 text-white rounded-full font-semibold text-sm shadow-md shadow-brand-blue/30 transition"
+                >
+                  Reconnect
+                </button>
+              )}
+            </>
+          )}
+          {isConfigConnected && (
+            <button
+              onClick={() => disconnect()}
+              className="px-5 py-2.5 bg-surface-tertiary hover:bg-red-500/20 text-text-primary hover:text-red-400 rounded-full font-medium text-sm border border-border transition"
+            >
+              Disconnect
+            </button>
+          )}
           <button
             onClick={() => refreshGrantedDevices()}
-            className="px-4 py-2 bg-surface-tertiary hover:bg-surface-tertiary/80 text-text-secondary rounded-full font-medium text-sm transition"
+            className="px-4 py-2.5 text-text-secondary hover:text-text-primary text-sm transition"
           >
-            Refresh list
+            Refresh
           </button>
         </div>
+
         {!isConfigConnected && grantedDevices.length === 0 && (
-          <p className="mt-3 text-sm text-text-tertiary">
-            <strong>Reconnect</strong> is enabled after you connect once with <strong>Request access</strong>. If the Micropad is already paired to the PC: in Windows, disconnect it from Bluetooth (Quick settings → Bluetooth → Micropad), then click <strong>Request access</strong> here to pair this browser. After that, <strong>Reconnect</strong> will work even when the Micropad is connected to the PC.
-          </p>
-        )}
-        {lastError && (
-          <p className="mt-3 text-sm text-red-400" role="alert">
-            {lastError}
-          </p>
-        )}
-        {lastError && (lastError.includes('busy') || lastError.includes('PC')) && (
-          <p className="mt-2 text-sm text-text-tertiary">
-            In Windows: Settings → Bluetooth & devices → find Micropad → click the three dots → Disconnect (or Remove device). Then try Request access or Reconnect again.
-          </p>
+          <div className="mt-4 rounded-lg bg-surface-tertiary/50 p-4">
+            <p className="text-sm text-text-secondary">
+              <strong>First time?</strong> Make sure your Micropad is powered on and nearby, then click <strong>Connect Micropad</strong>.
+              Your browser will show a device picker — select "Micropad" to pair.
+            </p>
+            <p className="text-xs text-text-tertiary mt-2">
+              After connecting once, the <strong>Reconnect</strong> button will appear for quick access next time.
+            </p>
+          </div>
         )}
       </div>
 
-      {/* Previously granted devices */}
-      {grantedDevices.length > 0 && (
-        <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
-          <h2 className="font-semibold text-text-primary mb-3">Previously granted devices</h2>
+      {/* Previously paired devices */}
+      {grantedDevices.length > 0 && !isConfigConnected && (
+        <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/30">
+          <h2 className="font-semibold text-text-primary mb-3">Saved devices</h2>
           <p className="text-sm text-text-secondary mb-4">
-            Reconnect without opening the pairing dialog. Device must be on and in range.
+            Reconnect without the pairing dialog. The device must be powered on and in range.
           </p>
-          <ul className="space-y-3">
-            {grantedDevices.map((granted) => {
-              const isCurrent = isConfigConnected && granted.device === currentBleDevice;
-              return (
-                <li
-                  key={granted.id}
-                  className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-tertiary/50 border border-border/50"
+          <ul className="space-y-2">
+            {grantedDevices.map((granted) => (
+              <li
+                key={granted.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-tertiary/50 border border-border/50"
+              >
+                <div>
+                  <p className="font-medium text-text-primary">{granted.name || 'Micropad'}</p>
+                  <p className="text-xs text-text-tertiary">{granted.id}</p>
+                </div>
+                <button
+                  onClick={() => granted.device && reconnectToGranted(granted.device)}
+                  disabled={isConnecting}
+                  className="px-4 py-2 bg-brand-blue hover:bg-brand-blue/90 disabled:opacity-50 text-white rounded-full font-medium text-sm transition"
                 >
-                  <div>
-                    <p className="font-medium text-text-primary">{granted.name}</p>
-                    <p className="text-xs text-text-tertiary">{granted.id}</p>
-                  </div>
-                  <button
-                    onClick={() => granted.device && handleReconnect(granted.device)}
-                    disabled={isConnecting || isCurrent}
-                    className="px-4 py-2 bg-brand-blue hover:bg-brand-blue/90 disabled:opacity-50 text-white rounded-full font-medium text-sm transition"
-                  >
-                    {isCurrent ? 'Connected' : 'Reconnect'}
-                  </button>
-                </li>
-              );
-            })}
+                  Reconnect
+                </button>
+              </li>
+            ))}
           </ul>
         </div>
       )}
 
-      {/* Device info */}
-      <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/40">
-        <h2 className="font-semibold text-text-primary mb-3">Device information</h2>
-        {deviceInfo ? (
-          <pre className="text-xs text-text-secondary whitespace-pre-wrap">
-            ID: {deviceInfo.deviceId}
-            FW: {deviceInfo.firmwareVersion}
-            HW: {deviceInfo.hardwareVersion}
-            Battery: {deviceInfo.batteryLevel}%
-          </pre>
-        ) : (
-          <p className="text-sm text-text-tertiary">Connect to a device to see info.</p>
-        )}
-      </div>
+      {/* Device info card — shown when connected */}
+      {isConfigConnected && deviceInfo && (
+        <div className="rounded-2xl border border-border/80 bg-surface-secondary/90 backdrop-blur p-5 shadow-lg shadow-black/30">
+          <h2 className="font-semibold text-text-primary mb-4">Device Details</h2>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+            <div>
+              <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Device</p>
+              <p className="text-text-primary font-medium">{deviceInfo.deviceId}</p>
+            </div>
+            <div>
+              <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Firmware</p>
+              <p className="text-text-primary font-medium">v{deviceInfo.firmwareVersion}</p>
+            </div>
+            <div>
+              <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Hardware</p>
+              <p className="text-text-primary font-medium">v{deviceInfo.hardwareVersion}</p>
+            </div>
+            <div>
+              <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Battery</p>
+              <p className="text-text-primary font-medium">{deviceInfo.batteryLevel}%</p>
+            </div>
+            {deviceCaps && (
+              <>
+                <div>
+                  <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Profile slots</p>
+                  <p className="text-text-primary font-medium">{deviceCaps.maxProfiles}</p>
+                </div>
+                <div>
+                  <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Free storage</p>
+                  <p className="text-text-primary font-medium">{Math.round(deviceCaps.freeBytes / 1024)}KB</p>
+                </div>
+              </>
+            )}
+            {connectionStatus && (
+              <>
+                <div>
+                  <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">PC keyboard</p>
+                  <p className="text-text-primary font-medium">{connectionStatus.hidReady ? 'Active' : connectionStatus.hidHostConnected ? 'Connecting' : 'Not paired'}</p>
+                </div>
+                <div>
+                  <p className="text-text-tertiary text-xs uppercase tracking-wide mb-0.5">Config channel</p>
+                  <p className="text-text-primary font-medium">{connectionStatus.configConnected ? 'Connected' : 'Not connected'}</p>
+                </div>
+              </>
+            )}
+          </div>
+          {deviceCaps && (
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <p className="text-xs text-text-tertiary">
+                Supported: Keys, Encoders, Profiles{deviceCaps.supportsMacros ? ', Macros' : ''}{deviceCaps.supportsLayers ? ', Layers' : ''}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
-      <p className="text-xs text-text-tertiary">
-        If the device doesn’t appear: ensure it’s on and advertising. When the device is connected to the PC as HID,
-        you can still connect from the browser to edit profiles (if the firmware allows two connections). Use Reconnect
-        for a previously granted device when possible. Refreshing the page (F5) closes the connection—use Reconnect to connect again.
-      </p>
+      {/* Help text */}
+      <div className="rounded-lg bg-surface-tertiary/30 px-4 py-3">
+        <p className="text-xs text-text-tertiary">
+          The Micropad can be connected to your PC as a keyboard and to this app for configuration at the same time.
+          If connection fails, try turning the Micropad off and on, or unpair it from Windows Bluetooth settings first.
+        </p>
+      </div>
     </div>
   );
 }

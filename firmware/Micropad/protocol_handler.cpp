@@ -3,6 +3,46 @@
 #include "ble_hid.h"
 #include "profile_manager.h"
 
+static void _serializeAction(const Action& action, JsonObject obj) {
+    obj["type"] = static_cast<int>(action.type);
+    switch (action.type) {
+        case ACTION_HOTKEY:
+            obj["modifiers"] = action.config.hotkey.modifiers;
+            obj["key"] = action.config.hotkey.key;
+            break;
+        case ACTION_TEXT:
+            obj["text"] = action.config.text.text;
+            break;
+        case ACTION_MEDIA:
+            obj["function"] = static_cast<int>(action.config.media.function);
+            break;
+        case ACTION_MOUSE:
+            obj["action"] = static_cast<int>(action.config.mouse.action);
+            obj["value"] = action.config.mouse.value;
+            break;
+        case ACTION_PROFILE:
+            obj["profileId"] = action.config.profile.profileId;
+            break;
+        case ACTION_MACRO: {
+            JsonArray stepsArr = obj.createNestedArray("macroSteps");
+            for (uint8_t i = 0; i < action.config.macro.stepCount && i < MAX_MACRO_STEPS; i++) {
+                JsonObject step = stepsArr.createNestedObject();
+                step["stepType"] = action.config.macro.steps[i].stepType;
+                step["delayMs"] = action.config.macro.steps[i].delayMs;
+                step["key"] = action.config.macro.steps[i].key;
+                step["modifiers"] = action.config.macro.steps[i].modifiers;
+                if (action.config.macro.steps[i].text[0] != '\0') {
+                    step["text"] = action.config.macro.steps[i].text;
+                }
+                step["mediaFunction"] = action.config.macro.steps[i].mediaFunction;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
 ProtocolHandler::ProtocolHandler() {
     _profileManager = nullptr;
     _bleService = nullptr;
@@ -163,13 +203,26 @@ void ProtocolHandler::handleGetDeviceInfo(uint32_t requestId) {
 }
 
 void ProtocolHandler::handleGetCaps(uint32_t requestId) {
-    DynamicJsonDocument payload(512);
+    DynamicJsonDocument payload(1024);
     
     payload["maxProfiles"] = MAX_PROFILES;
     payload["freeBytes"] = _profileManager->getFreeSpace();
-    payload["supportsLayers"] = false;   // Future
-    payload["supportsMacros"] = false;  // Macros on PC, embed on push
+    payload["supportsLayers"] = false;
+    payload["supportsMacros"] = true;
     payload["supportsEncoders"] = true;
+    payload["maxKeys"] = MATRIX_KEYS;
+    payload["maxEncoders"] = 2;
+    
+    // Report supported action types so UI can hide unsupported ones
+    JsonArray actions = payload.createNestedArray("supportedActions");
+    actions.add(0); // ACTION_NONE
+    actions.add(1); // ACTION_HOTKEY
+    actions.add(2); // ACTION_MACRO
+    actions.add(3); // ACTION_TEXT
+    actions.add(4); // ACTION_MEDIA
+    actions.add(5); // ACTION_MOUSE
+    actions.add(7); // ACTION_PROFILE
+    // ACTION_LAYER (6), ACTION_APP (8), ACTION_URL (9) not supported
     
     sendResponse(requestId, payload);
 }
@@ -241,11 +294,21 @@ void ProtocolHandler::handleGetProfile(uint32_t requestId, uint8_t profileId) {
         }
     }
     
-    // Encoders (simplified)
+    // Encoders
     JsonArray encoders = payload.createNestedArray("encoders");
     for (uint8_t i = 0; i < 2; i++) {
         JsonObject enc = encoders.createNestedObject();
         enc["index"] = i;
+        
+        JsonObject cwObj = enc.createNestedObject("cwAction");
+        _serializeAction(profile.encoders[i].cwAction, cwObj);
+        
+        JsonObject ccwObj = enc.createNestedObject("ccwAction");
+        _serializeAction(profile.encoders[i].ccwAction, ccwObj);
+        
+        JsonObject pressObj = enc.createNestedObject("pressAction");
+        _serializeAction(profile.encoders[i].pressAction, pressObj);
+        
         enc["acceleration"] = profile.encoders[i].acceleration;
         enc["stepsPerDetent"] = profile.encoders[i].stepsPerDetent;
     }
@@ -306,14 +369,15 @@ void ProtocolHandler::handleGetStats(uint32_t requestId) {
     
     JsonArray keyPresses = payload.createNestedArray("keyPresses");
     for (uint8_t i = 0; i < MATRIX_KEYS; i++) {
-        keyPresses.add(0);  // TODO: Track actual stats
+        keyPresses.add(keyPressCount[i]);
     }
     
     JsonArray encoderTurns = payload.createNestedArray("encoderTurns");
-    encoderTurns.add(0);
-    encoderTurns.add(0);
+    encoderTurns.add(encoderTurnCount[0]);
+    encoderTurns.add(encoderTurnCount[1]);
     
     payload["uptime"] = millis() / 1000;
+    payload["freeHeap"] = ESP.getFreeHeap();
     
     sendResponse(requestId, payload);
 }
@@ -341,20 +405,25 @@ void ProtocolHandler::handleGetConnectionStatus(uint32_t requestId) {
     bool configConnected = _bleService && _bleService->isConfigClientActive();
     bool hidHostConnected = _bleKeyboard && _bleKeyboard->isConnected();
     bool hidReady = _bleKeyboard && _bleKeyboard->isHidReady();
-    bool canAcceptConfigConnection = (clientCount == 0);
+    // Multi-connection: config can still be accepted when HID host is connected
+    bool canAcceptConfig = configConnected || (clientCount < 2);
     
     payload["configConnected"] = configConnected;
     payload["hidHostConnected"] = hidHostConnected;
     payload["hidReady"] = hidReady;
-    payload["advertising"] = (clientCount == 0);  // When no client, we advertise
+    payload["advertising"] = true;  // NimBLE keeps advertising after connect for multi-connection
     payload["clientCount"] = clientCount;
-    payload["canAcceptConfigConnection"] = canAcceptConfigConnection;
+    payload["canAcceptConfigConnection"] = canAcceptConfig;
     
     const char* reason = "ok";
-    if (clientCount > 0 && !configConnected && hidHostConnected) {
-        reason = "busy_with_hid_host";
-    } else if (clientCount > 0 && configConnected) {
-        reason = "ok";
+    if (configConnected && hidReady) {
+        reason = "fully_connected";
+    } else if (configConnected && hidHostConnected) {
+        reason = "config_and_hid";
+    } else if (configConnected) {
+        reason = "config_only";
+    } else if (hidHostConnected && !configConnected) {
+        reason = "hid_only";
     } else if (clientCount == 0) {
         reason = "not_connected";
     }
