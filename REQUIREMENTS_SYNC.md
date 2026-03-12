@@ -140,13 +140,13 @@ New `PresetsView` / `PresetsViewModel`; preset definitions (JSON or C#); optiona
 | Requirement | Current State | Gap / Action |
 |-------------|---------------|--------------|
 | **Single JSON envelope: type, id, payload** | App sends `v`, `type` (request), `id`, `cmd`, `payload`/`profileId`/`profile`; firmware expects `request`, `id`, `cmd` | Align with spec: **PUT_PROFILE** etc. (see below). Response: `type: "RESP"`, `id`, `ok`, `payload` or `error`/`message`. |
-| **GET_CAPS** | `getDeviceInfo` returns deviceId, firmwareVersion, capabilities array | Add **GET_CAPS** (or extend getDeviceInfo): `maxProfiles`, `freeBytes`, `supportsLayers`, `supportsMacros`, `supportsEncoders`. |
+| **GET_CAPS** | Implemented via `getCaps` with `maxProfiles`, `freeBytes`, `supportsLayers`, `supportsMacros`, `supportsEncoders`, plus key/encoder limits | Keep the payload aligned with the web app and protocol spec as capabilities evolve. |
 | **LIST_PROFILES** | `listProfiles` → profiles[] (id, name, size) | Add `updatedAt` if needed; keep compatible. |
 | **GET_PROFILE(profileId)** | Implemented | Keep. |
-| **PUT_PROFILE(profileObject)** | **handleSetProfile** returns "Not implemented yet" | **Implement:** validate profile JSON, save atomically to LittleFS (e.g. `/profiles/<id>`). |
-| **DELETE_PROFILE(profileId)** | Not implemented | Add command; free slot / delete file. |
-| **SET_ACTIVE_PROFILE(profileId)** | `setActiveProfile` implemented | Keep. |
-| **GET_ACTIVE_PROFILE** | Not implemented | Add; return current profile id. |
+| **PUT_PROFILE(profileObject)** | Implemented via `handleSetProfile`; validates input and rejects out-of-range profile IDs before saving | Keep improving user-facing error reporting and compatibility with larger profiles/macros. |
+| **DELETE_PROFILE(profileId)** | Implemented | Keep response/error behavior aligned across apps. |
+| **SET_ACTIVE_PROFILE(profileId)** | Implemented | Keep. |
+| **GET_ACTIVE_PROFILE** | Implemented | Keep returning the current profile ID for UI sync. |
 | **LIST_MACROS / GET/PUT/DELETE_MACRO** | No macro storage on device | Optional: implement for device-stored macros; or "macros only on PC, embed on push". |
 | **Events: EVENT_ACTIVE_PROFILE_CHANGED, EVENT_LAYER_CHANGED, EVENT_STATS** | `profileChanged` event sent | Rename/align to **EVENT_ACTIVE_PROFILE_CHANGED**; add **EVENT_LAYER_CHANGED**, **EVENT_STATS** (optional). |
 | **Chunking for > 2–5 KB** | Firmware receives chunked (chunk/total/dataB64); sends chunked for long payloads | Ensure chunk size and reassembly handle large profiles (e.g. 4–8 KB); avoid blocking in input path. |
@@ -158,12 +158,12 @@ New `PresetsView` / `PresetsViewModel`; preset definitions (JSON or C#); optiona
 
 ## Implementation Order (Suggested)
 
-1. **Firmware:** Implement `PUT_PROFILE` (validate + save), `GET_ACTIVE_PROFILE`, `DELETE_PROFILE`, `GET_CAPS` (or extend getDeviceInfo).
-2. **App — Profiles Manager:** Local vs Device split, push/pull/delete, conflict handling, capacity/active profile.
+1. **App — Profiles Manager:** Local vs Device split, push/pull/delete, conflict handling, capacity/active profile.
+2. **Firmware/App hardening:** Keep large profile transfers, validation, and error messages aligned across firmware and clients.
 3. **App — Macro Library:** MacroAsset model, GUID/tags, export/import, reference vs embed, extended step types.
 4. **App — Connection & diagnostics:** State machine, Fix Connection, Export Diagnostics.
 5. **App — Tray + HUD:** Tray behavior, quick profile menu, HUD overlay.
-6. **App — Auto profile:** Debounce, Manual Lock, rules (EXE + optional title, priority, default).http://localhost:5173/
+6. **App — Auto profile:** Debounce, Manual Lock, rules (EXE + optional title, priority, default).
 7. **Firmware + App — Layers:** Layer stack, Fn behaviors, per-layer keys in profile; layer tabs in UI.
 8. **Firmware + App — Encoders:** Pro mappings (hold, press+rotate, etc.), acceleration settings, mode cycle + HUD.
 9. **Combos + Tap/Hold/Double-tap:** Combo editor, per-key tap/hold/double in model and firmware.

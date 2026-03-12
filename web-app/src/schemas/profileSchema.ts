@@ -5,7 +5,7 @@ const keyConfigSchema = z.object({
   type: z.number(),
   modifiers: z.number().default(0),
   key: z.number().default(0),
-  text: z.string().optional(),
+  text: z.string().max(127).optional(),
   function: z.number().default(0),
   action: z.number().default(0),
   value: z.number().default(0),
@@ -15,7 +15,7 @@ const keyConfigSchema = z.object({
     delayMs: z.number().optional(),
     key: z.number().optional(),
     modifiers: z.number().optional(),
-    text: z.string().optional(),
+    text: z.string().max(31).optional(),
     mediaFunction: z.number().optional()
   })).optional()
 });
@@ -40,7 +40,7 @@ const encoderConfigSchema = z.object({
 
 export const profileSchema = z.object({
   id: z.number(),
-  name: z.string(),
+  name: z.string().max(31),
   version: z.number().default(1),
   keys: z.array(keyConfigSchema),
   encoders: z.array(encoderConfigSchema)
@@ -53,7 +53,7 @@ const macroStepSchema = z.object({
   delayMs: z.number().optional(),
   key: z.number().optional(),
   modifiers: z.number().optional(),
-  text: z.string().optional(),
+  text: z.string().max(31).optional(),
   mediaFunction: z.number().optional()
 }).passthrough();
 

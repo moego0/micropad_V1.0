@@ -16,6 +16,7 @@ interface ActionEditModalProps {
   keyIndex: number;
   supportedActions?: number[];
   supportsMacros: boolean;
+  maxProfiles?: number;
   onSave: (config: Partial<KeyConfig>) => void;
   onClose: () => void;
 }
@@ -32,7 +33,7 @@ const ALL_TYPE_OPTIONS: TypeOption[] = [
   { value: ActionType.Macro, label: 'Run Macro', description: 'Execute a sequence of actions with delays' },
 ];
 
-export default function ActionEditModal({ keyConfig, keyIndex, supportedActions, supportsMacros, onSave, onClose }: ActionEditModalProps) {
+export default function ActionEditModal({ keyConfig, keyIndex, supportedActions, supportsMacros, maxProfiles = 8, onSave, onClose }: ActionEditModalProps) {
   const [type, setType] = useState<ActionType>(keyConfig.type);
   const [modifiers, setModifiers] = useState({ ctrl: !!(keyConfig.modifiers & 0x01), shift: !!(keyConfig.modifiers & 0x02), alt: !!(keyConfig.modifiers & 0x04), win: !!(keyConfig.modifiers & 0x08) });
   const [key, setKey] = useState(stringKey(keyConfig.key));
@@ -192,8 +193,8 @@ export default function ActionEditModal({ keyConfig, keyIndex, supportedActions,
         {type === ActionType.Profile && (
           <div className="mb-5">
             <label className="block text-text-secondary text-xs font-medium mb-1.5">Target profile ID</label>
-            <input type="number" min={0} max={7} value={profileId} onChange={(e) => setProfileId(e.target.value)} className="w-full bg-surface-input text-text-primary rounded-lg px-3 py-2 border border-border" />
-            <p className="text-xs text-text-tertiary mt-1">Profile ID 0–7. The device will switch to this profile when the key is pressed.</p>
+            <input type="number" min={0} max={Math.max(0, maxProfiles - 1)} value={profileId} onChange={(e) => setProfileId(e.target.value)} className="w-full bg-surface-input text-text-primary rounded-lg px-3 py-2 border border-border" />
+            <p className="text-xs text-text-tertiary mt-1">Profile ID 0-{Math.max(0, maxProfiles - 1)}. The device will switch to this profile when the key is pressed.</p>
           </div>
         )}
 

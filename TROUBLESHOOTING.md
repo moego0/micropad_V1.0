@@ -63,8 +63,8 @@ Common issues and fixes for **Windows BLE pairing**, **connection**, and **app/d
 
 ### Profile push fails
 
-- **Cause:** Not connected, or firmware does not implement `setProfile` yet.
-- **Fix:** Ensure connection is active. Firmware currently returns "Not implemented yet" for `setProfile`; implement `PUT_PROFILE` in firmware (see [REQUIREMENTS_SYNC.md](REQUIREMENTS_SYNC.md) and [PROTOCOL_SPEC.md](PROTOCOL_SPEC.md)).
+- **Cause:** The browser is not connected, the profile exceeds device limits, or the BLE link dropped mid-transfer.
+- **Fix:** Connect from the **Devices** page first, then retry. The web app now validates profile ID, key count, and encoder count before saving, and the firmware returns explicit errors such as profile ID capacity issues instead of a generic failure.
 
 ### Stats empty
 

@@ -31,6 +31,8 @@ public:
     uint8_t getProfileCount();
     bool getProfileInfo(uint8_t id, char* name, size_t* size);
     bool loadProfileById(uint8_t id, Profile& profile);
+    bool loadProfileIntoWorkBuffer(uint8_t id);
+    const Profile* getWorkProfile() const;
     
     // Storage capacity (for GET_CAPS)
     size_t getFreeSpace();
@@ -46,6 +48,8 @@ private:
     ProfileStorage _storage;
     Preferences _prefs;
     Profile _currentProfile;
+    Profile _workProfile;
+    EncoderConfig _encoderScratch[2];
     uint8_t _activeProfileId;
     bool _initialized;
     

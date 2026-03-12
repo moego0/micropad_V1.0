@@ -3,16 +3,44 @@
 #include "ble_hid.h"
 #include "profile_manager.h"
 
+namespace {
+template <size_t N>
+void copyBoundedBuffer(const char* src, char (&dest)[N]) {
+    memcpy(dest, src, N);
+    dest[N - 1] = '\0';
+}
+
+bool isSupportedActionType(uint8_t rawType) {
+    switch (rawType) {
+        case ACTION_NONE:
+        case ACTION_HOTKEY:
+        case ACTION_MACRO:
+        case ACTION_TEXT:
+        case ACTION_MEDIA:
+        case ACTION_MOUSE:
+        case ACTION_PROFILE:
+            return true;
+        default:
+            return false;
+    }
+}
+}
+
 static void _serializeAction(const Action& action, JsonObject obj) {
-    obj["type"] = static_cast<int>(action.type);
-    switch (action.type) {
+    const ActionType type = isSupportedActionType(static_cast<uint8_t>(action.type)) ? action.type : ACTION_NONE;
+    obj["type"] = static_cast<int>(type);
+    switch (type) {
         case ACTION_HOTKEY:
             obj["modifiers"] = action.config.hotkey.modifiers;
             obj["key"] = action.config.hotkey.key;
             break;
         case ACTION_TEXT:
-            obj["text"] = action.config.text.text;
+        {
+            char safeText[sizeof(action.config.text.text)];
+            copyBoundedBuffer(action.config.text.text, safeText);
+            obj["text"] = safeText;
             break;
+        }
         case ACTION_MEDIA:
             obj["function"] = static_cast<int>(action.config.media.function);
             break;
@@ -31,8 +59,10 @@ static void _serializeAction(const Action& action, JsonObject obj) {
                 step["delayMs"] = action.config.macro.steps[i].delayMs;
                 step["key"] = action.config.macro.steps[i].key;
                 step["modifiers"] = action.config.macro.steps[i].modifiers;
-                if (action.config.macro.steps[i].text[0] != '\0') {
-                    step["text"] = action.config.macro.steps[i].text;
+                char safeStepText[sizeof(action.config.macro.steps[i].text)];
+                copyBoundedBuffer(action.config.macro.steps[i].text, safeStepText);
+                if (safeStepText[0] != '\0') {
+                    step["text"] = safeStepText;
                 }
                 step["mediaFunction"] = action.config.macro.steps[i].mediaFunction;
             }
@@ -249,18 +279,20 @@ void ProtocolHandler::handleListProfiles(uint32_t requestId) {
 }
 
 void ProtocolHandler::handleGetProfile(uint32_t requestId, uint8_t profileId) {
-    Profile profile;
-    
-    if (!_profileManager->loadProfileById(profileId, profile)) {
+    if (!_profileManager->loadProfileIntoWorkBuffer(profileId)) {
         sendResponse(requestId, false, "Profile not found");
         return;
     }
+
+    const Profile& profile = *(_profileManager->getWorkProfile());
     
     // Serialize profile to JSON
-    DynamicJsonDocument payload(4096);
+    DynamicJsonDocument payload(8192);
     
     payload["id"] = profile.id;
-    payload["name"] = profile.name;
+    char safeName[sizeof(profile.name)];
+    copyBoundedBuffer(profile.name, safeName);
+    payload["name"] = safeName;
     payload["version"] = profile.version;
     
     // Keys
@@ -268,30 +300,8 @@ void ProtocolHandler::handleGetProfile(uint32_t requestId, uint8_t profileId) {
     for (uint8_t i = 0; i < MATRIX_KEYS; i++) {
         JsonObject key = keys.createNestedObject();
         key["index"] = i;
-        key["type"] = static_cast<int>(profile.keys[i].action.type);
-        
-        // Add config based on type
-        switch (profile.keys[i].action.type) {
-            case ACTION_HOTKEY:
-                key["modifiers"] = profile.keys[i].action.config.hotkey.modifiers;
-                key["key"] = profile.keys[i].action.config.hotkey.key;
-                break;
-            case ACTION_TEXT:
-                key["text"] = profile.keys[i].action.config.text.text;
-                break;
-            case ACTION_MEDIA:
-                key["function"] = static_cast<int>(profile.keys[i].action.config.media.function);
-                break;
-            case ACTION_MOUSE:
-                key["action"] = static_cast<int>(profile.keys[i].action.config.mouse.action);
-                key["value"] = profile.keys[i].action.config.mouse.value;
-                break;
-            case ACTION_PROFILE:
-                key["profileId"] = profile.keys[i].action.config.profile.profileId;
-                break;
-            default:
-                break;
-        }
+
+        _serializeAction(profile.keys[i].action, key);
     }
     
     // Encoders
@@ -320,6 +330,11 @@ void ProtocolHandler::handleSetProfile(uint32_t requestId, const JsonDocument& d
     JsonObjectConst profileObj = doc["profile"].as<JsonObjectConst>();
     if (profileObj.isNull()) {
         sendResponse(requestId, false, "Missing profile");
+        return;
+    }
+    uint8_t profileId = profileObj["id"] | 255;
+    if (profileId >= MAX_PROFILES) {
+        sendResponse(requestId, false, "Profile ID exceeds device limit");
         return;
     }
     if (_profileManager->saveProfileFromJson(profileObj)) {
@@ -466,7 +481,7 @@ void ProtocolHandler::sendEvent(const String& eventName, const JsonDocument& pay
 }
 
 String ProtocolHandler::createMessage(const String& type, uint32_t id, const JsonDocument& payload) {
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(10240);
     doc["v"] = 1;
     doc["type"] = type;
     doc["id"] = id;

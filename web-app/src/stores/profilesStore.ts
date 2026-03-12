@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import type { Profile, KeyConfig, EncoderActionConfig } from '../models/types';
-import { ActionType } from '../models/types';
+import type { DeviceCaps, Profile, KeyConfig, EncoderActionConfig } from '../models/types';
+import { ActionType, MediaFunction, MouseAction } from '../models/types';
 import { useDeviceStore } from './deviceStore';
 import * as profileStorage from '../storage/profileStorage';
 
 const KEY_COUNT = 12;
+const ENCODER_COUNT = 2;
+const DEFAULT_MAX_PROFILES = 8;
 
 function ensureKeys(profile: Profile): void {
   while (profile.keys.length < KEY_COUNT) {
@@ -19,12 +21,12 @@ function ensureKeys(profile: Profile): void {
       profileId: 0
     });
   }
-  profile.keys.forEach((k, i) => { k.index = i; });
+  profile.keys.forEach((key, index) => { key.index = index; });
 }
 
 function ensureEncoders(profile: Profile): void {
   if (!profile.encoders) profile.encoders = [];
-  while (profile.encoders.length < 2) {
+  while (profile.encoders.length < ENCODER_COUNT) {
     profile.encoders.push({
       index: profile.encoders.length,
       acceleration: true,
@@ -34,10 +36,83 @@ function ensureEncoders(profile: Profile): void {
       pressAction: { type: ActionType.None }
     });
   }
+  profile.encoders.forEach((encoder, index) => { encoder.index = index; });
 }
 
-function cloneProfile(p: Profile): Profile {
-  return JSON.parse(JSON.stringify(p));
+function cloneProfile(profile: Profile): Profile {
+  return JSON.parse(JSON.stringify(profile)) as Profile;
+}
+
+function prepareProfile(profile: Profile): Profile {
+  const next = cloneProfile(profile);
+  ensureKeys(next);
+  ensureEncoders(next);
+  return next;
+}
+
+function upsertProfile(list: Profile[], profile: Profile): Profile[] {
+  const next = prepareProfile(profile);
+  const index = list.findIndex((entry) => entry.id === next.id);
+  if (index >= 0) {
+    return [...list.slice(0, index), next, ...list.slice(index + 1)];
+  }
+  return [...list, next].sort((a, b) => a.id - b.id);
+}
+
+function getProfileLimits(caps: DeviceCaps | null | undefined) {
+  return {
+    maxProfiles: caps?.maxProfiles ?? DEFAULT_MAX_PROFILES,
+    maxKeys: caps?.maxKeys ?? KEY_COUNT,
+    maxEncoders: caps?.maxEncoders ?? ENCODER_COUNT
+  };
+}
+
+export function getNextAvailableProfileId(profiles: Profile[], maxProfiles: number): number | null {
+  const used = new Set(profiles.map((profile) => profile.id));
+  for (let nextId = 0; nextId < maxProfiles; nextId += 1) {
+    if (!used.has(nextId)) return nextId;
+  }
+  return null;
+}
+
+export function getProfileValidationError(profile: Profile, caps: DeviceCaps | null | undefined): string | null {
+  const limits = getProfileLimits(caps);
+  if (profile.name.trim().length === 0) {
+    return 'Give this profile a name before saving.';
+  }
+  if (profile.name.length > 31) {
+    return 'Profile names can be up to 31 characters on this Micropad.';
+  }
+  if (profile.id >= limits.maxProfiles) {
+    return `This profile ID exceeds your device's capacity (max ${limits.maxProfiles} profiles).`;
+  }
+  if (profile.keys.length > limits.maxKeys) {
+    return `This profile has ${profile.keys.length} keys, but the device supports ${limits.maxKeys}.`;
+  }
+  if (profile.encoders.length > limits.maxEncoders) {
+    return `This profile has ${profile.encoders.length} encoders, but the device supports ${limits.maxEncoders}.`;
+  }
+  return null;
+}
+
+export function getPushErrorMessage(error: unknown, maxProfiles: number): string {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const lowered = message.toLowerCase();
+
+  if (lowered.includes('not connected') || lowered.includes('gatt') || lowered.includes('disconnected') || lowered.includes('networkerror')) {
+    return 'Lost connection while saving. Reconnect and try again.';
+  }
+  if (lowered.includes('protocol not ready')) {
+    return 'Connect your Micropad on the Devices page first.';
+  }
+  if (lowered.includes('profile id exceeds device limit') || lowered.includes('device limit') || lowered.includes('out of range')) {
+    return `This profile ID exceeds your device's capacity (max ${maxProfiles} profiles).`;
+  }
+  if (lowered.includes('save failed') || lowered.includes('invalid profile') || lowered.includes('device could not save')) {
+    return 'The device could not save this profile. It may be full.';
+  }
+
+  return `Save failed: ${message}`;
 }
 
 const ENCODER_NONE: EncoderActionConfig = { type: ActionType.None };
@@ -51,13 +126,15 @@ interface ProfilesStore {
   deviceCapsText: string;
   statusText: string;
   isProfilesLoading: boolean;
+  isLoadingProfile: boolean;
   isPushInProgress: boolean;
+  isDirty: boolean;
   pushStepText: string;
   lastSyncTime: string | null;
   loadProfiles: () => Promise<void>;
-  selectProfile: (p: Profile | null) => void;
-  setEditingProfile: (p: Profile | null) => void;
-  setSelectedKeySlotIndex: (i: number) => void;
+  selectProfile: (profile: Profile | null) => Promise<void>;
+  setEditingProfile: (profile: Profile | null) => void;
+  setSelectedKeySlotIndex: (index: number) => void;
   getKeySlots: () => KeyConfig[];
   updateKeyAt: (keyIndex: number, config: Partial<KeyConfig>) => void;
   pushToDevice: () => Promise<void>;
@@ -69,7 +146,7 @@ interface ProfilesStore {
   deleteLocal: () => Promise<void>;
   deleteFromDevice: () => Promise<void>;
   setActiveProfileOnDevice: () => Promise<void>;
-  setStatus: (s: string) => void;
+  setStatus: (status: string) => void;
   applyEncoderPreset: (encoderIndex: number, preset: string) => void;
   renameProfile: (name: string) => void;
 }
@@ -83,65 +160,157 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   deviceCapsText: '',
   statusText: '',
   isProfilesLoading: false,
+  isLoadingProfile: false,
   isPushInProgress: false,
+  isDirty: false,
   pushStepText: '',
   lastSyncTime: null,
 
   loadProfiles: async () => {
-    set((s) => ({ ...s, isProfilesLoading: true }));
+    set((state) => ({ ...state, isProfilesLoading: true }));
     try {
-      const sync = useDeviceStore.getState().syncService;
-      const local = await profileStorage.getAllProfiles();
+      const deviceState = useDeviceStore.getState();
+      const sync = deviceState.syncService;
+      const local = (await profileStorage.getAllProfiles()).map(prepareProfile);
       let list = local;
-      if (sync && useDeviceStore.getState().ble?.isConnected) {
+
+      if (sync && deviceState.ble?.isConnected) {
         const deviceList = await sync.listProfiles();
-        const deviceIds = new Set(deviceList.map((p) => p.id));
-        for (const p of local) {
-          if (!deviceIds.has(p.id)) list = [...list, p];
+        const deviceIds = new Set(deviceList.map((profile) => profile.id));
+
+        for (const localProfile of local) {
+          if (!deviceIds.has(localProfile.id)) list = [...list, localProfile];
         }
-        for (const p of deviceList) {
-          if (!list.some((x) => x.id === p.id)) list = [...list, p];
+        for (const deviceProfile of deviceList) {
+          if (!list.some((entry) => entry.id === deviceProfile.id)) list = [...list, deviceProfile];
         }
+
         list.sort((a, b) => a.id - b.id);
         const activeId = await sync.getActiveProfileId();
         const caps = await sync.getCaps();
         const capsText = caps
           ? `${list.length}/${caps.maxProfiles} profiles · ${Math.round(caps.freeBytes / 1024)}KB free`
           : '';
-        set((s) => ({ ...s, profiles: list, activeProfileId: activeId ?? null, deviceCapsText: capsText }));
+
+        set((state) => ({
+          ...state,
+          profiles: list,
+          activeProfileId: activeId ?? null,
+          deviceCapsText: capsText
+        }));
       } else {
-        set((s) => ({ ...s, profiles: list }));
+        set((state) => ({ ...state, profiles: list, deviceCapsText: '' }));
       }
-      set((s) => ({ ...s, statusText: list.length > 0 ? `${list.length} profile(s) loaded` : 'No profiles yet. Create one to get started.' }));
-    } catch (e) {
-      set((s) => ({ ...s, statusText: `Could not load profiles: ${(e as Error).message}` }));
+
+      set((state) => ({
+        ...state,
+        statusText: list.length > 0 ? `${list.length} profile(s) loaded` : 'No profiles yet. Create one to get started.'
+      }));
+    } catch (error) {
+      set((state) => ({ ...state, statusText: `Could not load profiles: ${(error as Error).message}` }));
     } finally {
-      set((s) => ({ ...s, isProfilesLoading: false }));
+      set((state) => ({ ...state, isProfilesLoading: false }));
     }
   },
 
-  selectProfile: (selectedProfile) => {
-    set((s) => ({ ...s, selectedProfile, selectedKeySlotIndex: -1 }));
-    if (selectedProfile) {
-      const full = cloneProfile(selectedProfile);
-      ensureKeys(full);
-      ensureEncoders(full);
-      set((s) => ({ ...s, editingProfile: full }));
-    } else {
-      set((s) => ({ ...s, editingProfile: null }));
+  selectProfile: async (selectedProfile) => {
+    if (!selectedProfile) {
+      set((state) => ({
+        ...state,
+        selectedProfile: null,
+        editingProfile: null,
+        selectedKeySlotIndex: -1,
+        isLoadingProfile: false,
+        isDirty: false
+      }));
+      return;
+    }
+
+    set((state) => ({
+      ...state,
+      selectedProfile,
+      selectedKeySlotIndex: -1,
+      isLoadingProfile: true,
+      statusText: `Loading "${selectedProfile.name}"…`
+    }));
+
+    try {
+      const deviceState = useDeviceStore.getState();
+      const sync = deviceState.syncService;
+      let fullProfile: Profile | null = null;
+
+      if (sync && deviceState.ble?.isConnected) {
+        fullProfile = await sync.pullProfile(selectedProfile.id);
+        if (!fullProfile) {
+          set((state) => ({
+            ...state,
+            isLoadingProfile: false,
+            editingProfile: null,
+            isDirty: false,
+            statusText: `Could not load "${selectedProfile.name}" from the device. Try again.`
+          }));
+          return;
+        }
+        await sync.saveProfileLocally(fullProfile);
+      } else {
+        fullProfile = await profileStorage.getProfile(selectedProfile.id);
+        if (!fullProfile) {
+          set((state) => ({
+            ...state,
+            isLoadingProfile: false,
+            editingProfile: null,
+            isDirty: false,
+            statusText: 'This profile only exists on the device. Connect your Micropad to load it.'
+          }));
+          return;
+        }
+      }
+
+      const readyProfile = prepareProfile(fullProfile);
+      const profiles = upsertProfile(get().profiles, readyProfile);
+
+      set((state) => ({
+        ...state,
+        profiles,
+        selectedProfile: readyProfile,
+        editingProfile: cloneProfile(readyProfile),
+        isLoadingProfile: false,
+        isDirty: false,
+        statusText: deviceState.ble?.isConnected
+          ? `"${readyProfile.name}" loaded from device`
+          : `"${readyProfile.name}" loaded locally`
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        isLoadingProfile: false,
+        editingProfile: null,
+        isDirty: false,
+        statusText: `Could not load "${selectedProfile.name}" from device: ${(error as Error).message}`
+      }));
     }
   },
 
-  setEditingProfile: (editingProfile) => set((s) => ({ ...s, editingProfile })),
-  setSelectedKeySlotIndex: (selectedKeySlotIndex) => set((s) => ({ ...s, selectedKeySlotIndex })),
+  setEditingProfile: (editingProfile) => set((state) => ({ ...state, editingProfile })),
+  setSelectedKeySlotIndex: (selectedKeySlotIndex) => set((state) => ({ ...state, selectedKeySlotIndex })),
 
   getKeySlots: () => {
     const { editingProfile } = get();
     if (!editingProfile) return [];
+
     ensureKeys(editingProfile);
     const out: KeyConfig[] = [];
-    for (let i = 0; i < KEY_COUNT; i++) {
-      out.push(editingProfile.keys[i] ?? { index: i, type: 0, modifiers: 0, key: 0, function: 0, action: 0, value: 0, profileId: 0 });
+    for (let index = 0; index < KEY_COUNT; index += 1) {
+      out.push(editingProfile.keys[index] ?? {
+        index,
+        type: ActionType.None,
+        modifiers: 0,
+        key: 0,
+        function: 0,
+        action: 0,
+        value: 0,
+        profileId: 0
+      });
     }
     return out;
   },
@@ -149,87 +318,123 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   updateKeyAt: (keyIndex, config) => {
     const { editingProfile } = get();
     if (!editingProfile) return;
-    const arr = editingProfile.keys;
-    if (keyIndex >= 0 && keyIndex < arr.length) {
-      arr[keyIndex] = { ...arr[keyIndex], ...config, index: keyIndex };
-      set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
+
+    ensureKeys(editingProfile);
+    if (keyIndex >= 0 && keyIndex < editingProfile.keys.length) {
+      editingProfile.keys[keyIndex] = { ...editingProfile.keys[keyIndex], ...config, index: keyIndex };
+      set((state) => ({ ...state, editingProfile: { ...editingProfile }, isDirty: true }));
     }
   },
 
   pushToDevice: async () => {
     const { editingProfile } = get();
     if (!editingProfile) return;
-    const sync = useDeviceStore.getState().syncService;
-    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
-    set((s) => ({ ...s, isPushInProgress: true, pushStepText: 'Preparing…' }));
+
+    const deviceState = useDeviceStore.getState();
+    const sync = deviceState.syncService;
+    if (!sync || !deviceState.ble?.isConnected) {
+      set((state) => ({ ...state, statusText: 'Connect your Micropad on the Devices page first.' }));
+      return;
+    }
+
+    const preparedProfile = prepareProfile(editingProfile);
+    const validationError = getProfileValidationError(preparedProfile, deviceState.deviceCaps);
+    const { maxProfiles } = getProfileLimits(deviceState.deviceCaps);
+
+    if (validationError) {
+      set((state) => ({ ...state, statusText: validationError }));
+      return;
+    }
+
+    set((state) => ({ ...state, isPushInProgress: true, pushStepText: 'Preparing…' }));
+
     try {
-      await new Promise((r) => setTimeout(r, 120));
-      set((s) => ({ ...s, pushStepText: 'Sending to device…' }));
-      const ok = await sync.pushProfile(editingProfile);
-      if (ok) {
-        await sync.saveProfileLocally(editingProfile);
-        const now = new Date().toLocaleTimeString();
-        set((s) => ({
-          ...s,
-          pushStepText: 'Saved!',
-          statusText: `"${editingProfile.name}" saved to device`,
-          lastSyncTime: now
-        }));
-      } else {
-        set((s) => ({
-          ...s,
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      set((state) => ({ ...state, pushStepText: 'Sending to device…' }));
+
+      const ok = await sync.pushProfile(preparedProfile);
+      if (!ok) {
+        set((state) => ({
+          ...state,
           pushStepText: 'Failed',
-          statusText: 'Device did not respond. Try disconnecting and reconnecting on the Devices page.'
+          statusText: 'The device could not save this profile. It may be full.'
         }));
+        return;
       }
-    } catch (e) {
-      const msg = (e as Error).message;
-      set((s) => ({
-        ...s,
+
+      await sync.saveProfileLocally(preparedProfile);
+      const now = new Date().toLocaleTimeString();
+      const profiles = upsertProfile(get().profiles, preparedProfile);
+
+      set((state) => ({
+        ...state,
+        profiles,
+        selectedProfile: preparedProfile,
+        editingProfile: cloneProfile(preparedProfile),
+        isDirty: false,
+        pushStepText: 'Saved!',
+        statusText: `"${preparedProfile.name}" saved to device`,
+        lastSyncTime: now
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
         pushStepText: 'Error',
-        statusText: msg.includes('Not connected')
-          ? 'Not connected. Open the Devices page to connect first.'
-          : `Save failed: ${msg}`
+        statusText: getPushErrorMessage(error, maxProfiles)
       }));
     } finally {
-      setTimeout(() => set((s) => ({ ...s, isPushInProgress: false, pushStepText: '' })), 1500);
+      setTimeout(() => {
+        set((state) => ({ ...state, isPushInProgress: false, pushStepText: '' }));
+      }, 1500);
     }
   },
 
   pullFromDevice: async () => {
     const { selectedProfile } = get();
     if (!selectedProfile) return;
-    const sync = useDeviceStore.getState().syncService;
-    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
+
+    const deviceState = useDeviceStore.getState();
+    const sync = deviceState.syncService;
+    if (!sync || !deviceState.ble?.isConnected) {
+      set((state) => ({ ...state, statusText: 'Connect your Micropad on the Devices page first.' }));
+      return;
+    }
+
     try {
-      set((s) => ({ ...s, statusText: 'Loading from device…' }));
+      set((state) => ({ ...state, isLoadingProfile: true, statusText: 'Loading from device…' }));
       const full = await sync.pullProfile(selectedProfile.id);
       if (!full) {
-        set((s) => ({ ...s, statusText: 'Device did not respond. Try disconnecting and reconnecting.' }));
+        set((state) => ({
+          ...state,
+          isLoadingProfile: false,
+          statusText: 'Could not load profile from device. Reconnect and try again.'
+        }));
         return;
       }
-      ensureKeys(full);
-      ensureEncoders(full);
-      await sync.saveProfileLocally(full);
-      const list = get().profiles;
-      const idx = list.findIndex((p) => p.id === full.id);
-      const newList = idx >= 0 ? [...list.slice(0, idx), full, ...list.slice(idx + 1)] : [...list, full].sort((a, b) => a.id - b.id);
+
+      const readyProfile = prepareProfile(full);
+      await sync.saveProfileLocally(readyProfile);
       const now = new Date().toLocaleTimeString();
-      set((s) => ({
-        ...s,
-        profiles: newList,
-        selectedProfile: full,
-        editingProfile: cloneProfile(full),
-        statusText: `"${full.name}" loaded from device`,
+      const profiles = upsertProfile(get().profiles, readyProfile);
+
+      set((state) => ({
+        ...state,
+        profiles,
+        selectedProfile: readyProfile,
+        editingProfile: cloneProfile(readyProfile),
+        isLoadingProfile: false,
+        isDirty: false,
+        statusText: `"${readyProfile.name}" loaded from device`,
         lastSyncTime: now
       }));
-    } catch (e) {
-      const msg = (e as Error).message;
-      set((s) => ({
-        ...s,
-        statusText: msg.includes('Not connected')
-          ? 'Not connected. Open the Devices page to connect first.'
-          : `Load failed: ${msg}`
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      set((state) => ({
+        ...state,
+        isLoadingProfile: false,
+        statusText: message.toLowerCase().includes('not connected')
+          ? 'Connect your Micropad on the Devices page first.'
+          : `Load failed: ${message}`
       }));
     }
   },
@@ -237,59 +442,85 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   saveLocally: async () => {
     const { editingProfile } = get();
     if (!editingProfile) return;
-    await profileStorage.saveProfile(editingProfile);
-    const list = get().profiles;
-    const idx = list.findIndex((p) => p.id === editingProfile.id);
-    const newList = idx >= 0 ? [...list.slice(0, idx), editingProfile, ...list.slice(idx + 1)] : [...list, editingProfile].sort((a, b) => a.id - b.id);
-    set((s) => ({ ...s, profiles: newList, statusText: `"${editingProfile.name}" saved locally` }));
+
+    const preparedProfile = prepareProfile(editingProfile);
+    await profileStorage.saveProfile(preparedProfile);
+    const profiles = upsertProfile(get().profiles, preparedProfile);
+
+    set((state) => ({
+      ...state,
+      profiles,
+      selectedProfile: preparedProfile,
+      editingProfile: cloneProfile(preparedProfile),
+      isDirty: false,
+      statusText: `"${preparedProfile.name}" saved locally`
+    }));
   },
 
   createProfile: async () => {
-    const list = get().profiles;
-    const used = new Set(list.map((p) => p.id));
-    let nextId = 0;
-    while (used.has(nextId) && nextId < 64) nextId++;
-    const profile: Profile = {
+    const profiles = get().profiles;
+    const { maxProfiles } = getProfileLimits(useDeviceStore.getState().deviceCaps);
+    const nextId = getNextAvailableProfileId(profiles, maxProfiles);
+
+    if (nextId === null) {
+      set((state) => ({
+        ...state,
+        statusText: `This device supports up to ${maxProfiles} profiles. Delete one first.`
+      }));
+      return;
+    }
+
+    const profile = prepareProfile({
       id: nextId,
       name: `Profile ${nextId + 1}`,
       version: 1,
       keys: [],
       encoders: []
-    };
-    ensureKeys(profile);
-    ensureEncoders(profile);
+    });
+
     await profileStorage.saveProfile(profile);
-    const newList = [...list, profile].sort((a, b) => a.id - b.id);
-    set((s) => ({
-      ...s,
-      profiles: newList,
+    const nextProfiles = upsertProfile(profiles, profile);
+
+    set((state) => ({
+      ...state,
+      profiles: nextProfiles,
       selectedProfile: profile,
       editingProfile: cloneProfile(profile),
+      isDirty: false,
       statusText: 'New profile created. Assign keys and save to device.'
     }));
   },
 
   createProfileFromPreset: async (presetName) => {
-    const list = get().profiles;
-    const used = new Set(list.map((p) => p.id));
-    let nextId = 0;
-    while (used.has(nextId) && nextId < 64) nextId++;
-    const profile: Profile = {
+    const profiles = get().profiles;
+    const { maxProfiles } = getProfileLimits(useDeviceStore.getState().deviceCaps);
+    const nextId = getNextAvailableProfileId(profiles, maxProfiles);
+
+    if (nextId === null) {
+      set((state) => ({
+        ...state,
+        statusText: `This device supports up to ${maxProfiles} profiles. Delete one first.`
+      }));
+      return;
+    }
+
+    const profile = prepareProfile({
       id: nextId,
       name: presetName,
       version: 1,
       keys: [],
       encoders: []
-    };
-    ensureKeys(profile);
-    ensureEncoders(profile);
+    });
+
     await profileStorage.saveProfile(profile);
-    const newList = [...list, profile].sort((a, b) => a.id - b.id);
-    set((s) => ({
-      ...s,
-      profiles: newList,
+    const nextProfiles = upsertProfile(profiles, profile);
+
+    set((state) => ({
+      ...state,
+      profiles: nextProfiles,
       selectedProfile: profile,
       editingProfile: cloneProfile(profile),
+      isDirty: false,
       statusText: `"${presetName}" created. Customize keys in the Profiles tab.`
     }));
   },
@@ -297,20 +528,32 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   duplicateProfile: async () => {
     const { editingProfile, profiles } = get();
     if (!editingProfile) return;
-    const used = new Set(profiles.map((p) => p.id));
-    let nextId = 0;
-    while (used.has(nextId) && nextId < 64) nextId++;
-    const copy = cloneProfile(editingProfile);
+
+    const { maxProfiles } = getProfileLimits(useDeviceStore.getState().deviceCaps);
+    const nextId = getNextAvailableProfileId(profiles, maxProfiles);
+
+    if (nextId === null) {
+      set((state) => ({
+        ...state,
+        statusText: `This device supports up to ${maxProfiles} profiles. Delete one first.`
+      }));
+      return;
+    }
+
+    const copy = prepareProfile(editingProfile);
     copy.id = nextId;
     copy.name = `Copy of ${editingProfile.name || 'Unnamed'}`;
     copy.version = 1;
+
     await profileStorage.saveProfile(copy);
-    const newList = [...profiles, copy].sort((a, b) => a.id - b.id);
-    set((s) => ({
-      ...s,
-      profiles: newList,
+    const nextProfiles = upsertProfile(profiles, copy);
+
+    set((state) => ({
+      ...state,
+      profiles: nextProfiles,
       selectedProfile: copy,
       editingProfile: cloneProfile(copy),
+      isDirty: false,
       statusText: `Duplicated as "${copy.name}"`
     }));
   },
@@ -318,14 +561,16 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   deleteLocal: async () => {
     const { selectedProfile, profiles } = get();
     if (!selectedProfile) return;
+
     await profileStorage.deleteProfile(selectedProfile.id);
-    const newList = profiles.filter((p) => p.id !== selectedProfile.id);
-    const next = newList[0] ?? null;
-    set((s) => ({
-      ...s,
-      profiles: newList,
-      selectedProfile: next,
-      editingProfile: next ? cloneProfile(next) : null,
+    const nextProfiles = profiles.filter((profile) => profile.id !== selectedProfile.id);
+
+    set((state) => ({
+      ...state,
+      profiles: nextProfiles,
+      selectedProfile: null,
+      editingProfile: null,
+      isDirty: false,
       statusText: 'Profile deleted locally'
     }));
   },
@@ -333,84 +578,118 @@ export const useProfilesStore = create<ProfilesStore>((set, get) => ({
   deleteFromDevice: async () => {
     const { selectedProfile, profiles } = get();
     if (!selectedProfile) return;
-    const sync = useDeviceStore.getState().syncService;
-    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
+
+    const deviceState = useDeviceStore.getState();
+    const sync = deviceState.syncService;
+    if (!sync || !deviceState.ble?.isConnected) {
+      set((state) => ({ ...state, statusText: 'Connect your Micropad on the Devices page first.' }));
+      return;
+    }
+
     try {
       const ok = await sync.deleteProfileFromDevice(selectedProfile.id);
-      if (ok) {
-        const newList = profiles.filter((p) => p.id !== selectedProfile.id);
-        const next = newList[0] ?? null;
-        set((s) => ({
-          ...s,
-          profiles: newList,
-          selectedProfile: next,
-          editingProfile: next ? cloneProfile(next) : null,
-          statusText: 'Profile deleted from device'
-        }));
-      } else {
-        set((s) => ({ ...s, statusText: 'Device did not respond. Try disconnecting and reconnecting.' }));
+      if (!ok) {
+        set((state) => ({ ...state, statusText: 'Device did not respond. Try reconnecting and trying again.' }));
+        return;
       }
-    } catch (e) {
-      const msg = (e as Error).message;
-      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? 'Not connected. Open the Devices page first.' : `Delete failed: ${msg}` }));
+
+      const nextProfiles = profiles.filter((profile) => profile.id !== selectedProfile.id);
+
+      set((state) => ({
+        ...state,
+        profiles: nextProfiles,
+        selectedProfile: null,
+        editingProfile: null,
+        isDirty: false,
+        statusText: 'Profile deleted from device'
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      set((state) => ({
+        ...state,
+        statusText: message.toLowerCase().includes('not connected')
+          ? 'Connect your Micropad on the Devices page first.'
+          : `Delete failed: ${message}`
+      }));
     }
   },
 
   setActiveProfileOnDevice: async () => {
     const { selectedProfile } = get();
     if (!selectedProfile) return;
-    const sync = useDeviceStore.getState().syncService;
-    if (!sync) { set((s) => ({ ...s, statusText: 'Not connected. Open Devices page to connect.' })); return; }
+
+    const deviceState = useDeviceStore.getState();
+    const sync = deviceState.syncService;
+    if (!sync || !deviceState.ble?.isConnected) {
+      set((state) => ({ ...state, statusText: 'Connect your Micropad on the Devices page first.' }));
+      return;
+    }
+
     try {
       const ok = await sync.setActiveProfile(selectedProfile.id);
-      if (ok) set((s) => ({ ...s, activeProfileId: selectedProfile.id, statusText: `"${selectedProfile.name}" is now the active profile` }));
-      else set((s) => ({ ...s, statusText: 'Device did not respond. Try disconnecting and reconnecting.' }));
-    } catch (e) {
-      const msg = (e as Error).message;
-      set((s) => ({ ...s, statusText: msg.includes('Not connected') ? 'Not connected.' : `Failed: ${msg}` }));
+      if (ok) {
+        set((state) => ({
+          ...state,
+          activeProfileId: selectedProfile.id,
+          statusText: `"${selectedProfile.name}" is now the active profile`
+        }));
+      } else {
+        set((state) => ({ ...state, statusText: 'Device did not respond. Try reconnecting and trying again.' }));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      set((state) => ({
+        ...state,
+        statusText: message.toLowerCase().includes('not connected')
+          ? 'Connect your Micropad on the Devices page first.'
+          : `Failed: ${message}`
+      }));
     }
   },
 
-  setStatus: (statusText) => set((s) => ({ ...s, statusText })),
+  setStatus: (statusText) => set((state) => ({ ...state, statusText })),
 
-  renameProfile: (name: string) => {
+  renameProfile: (name) => {
     const { editingProfile } = get();
     if (!editingProfile) return;
+
     editingProfile.name = name;
-    set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
+    set((state) => ({ ...state, editingProfile: { ...editingProfile }, isDirty: true }));
   },
 
   applyEncoderPreset: (encoderIndex, preset) => {
     const { editingProfile } = get();
     if (!editingProfile?.encoders?.[encoderIndex]) return;
-    const enc = editingProfile.encoders[encoderIndex];
+
+    const encoder = editingProfile.encoders[encoderIndex];
     switch (preset) {
       case 'Volume':
-        enc.cwAction = { type: ActionType.Media, function: MediaFunction.VolumeUp };
-        enc.ccwAction = { type: ActionType.Media, function: MediaFunction.VolumeDown };
-        enc.pressAction = { type: ActionType.Media, function: MediaFunction.Mute };
+        encoder.cwAction = { type: ActionType.Media, function: MediaFunction.VolumeUp };
+        encoder.ccwAction = { type: ActionType.Media, function: MediaFunction.VolumeDown };
+        encoder.pressAction = { type: ActionType.Media, function: MediaFunction.Mute };
         break;
       case 'Scroll':
-        enc.cwAction = { type: ActionType.Mouse, action: MouseAction.ScrollUp, value: 1 };
-        enc.ccwAction = { type: ActionType.Mouse, action: MouseAction.ScrollDown, value: 1 };
-        enc.pressAction = ENCODER_NONE;
+        encoder.cwAction = { type: ActionType.Mouse, action: MouseAction.ScrollUp, value: 1 };
+        encoder.ccwAction = { type: ActionType.Mouse, action: MouseAction.ScrollDown, value: 1 };
+        encoder.pressAction = { ...ENCODER_NONE };
         break;
       case 'Zoom':
-        enc.cwAction = { type: ActionType.Hotkey, modifiers: 0x01, key: 0x2E };  // Ctrl + ]
-        enc.ccwAction = { type: ActionType.Hotkey, modifiers: 0x01, key: 0x2D };  // Ctrl + [
-        enc.pressAction = ENCODER_NONE;
+        encoder.cwAction = { type: ActionType.Hotkey, modifiers: 0x01, key: 0x2E };
+        encoder.ccwAction = { type: ActionType.Hotkey, modifiers: 0x01, key: 0x2D };
+        encoder.pressAction = { ...ENCODER_NONE };
         break;
       case 'Media':
-        enc.cwAction = { type: ActionType.Media, function: MediaFunction.Next };
-        enc.ccwAction = { type: ActionType.Media, function: MediaFunction.Prev };
-        enc.pressAction = { type: ActionType.Media, function: MediaFunction.PlayPause };
+        encoder.cwAction = { type: ActionType.Media, function: MediaFunction.Next };
+        encoder.ccwAction = { type: ActionType.Media, function: MediaFunction.Prev };
+        encoder.pressAction = { type: ActionType.Media, function: MediaFunction.PlayPause };
         break;
       default:
-        enc.cwAction = enc.ccwAction = enc.pressAction = { ...ENCODER_NONE };
+        encoder.cwAction = { ...ENCODER_NONE };
+        encoder.ccwAction = { ...ENCODER_NONE };
+        encoder.pressAction = { ...ENCODER_NONE };
+        break;
     }
-    set((s) => ({ ...s, editingProfile: { ...editingProfile } }));
+
+    set((state) => ({ ...state, editingProfile: { ...editingProfile }, isDirty: true }));
   }
 }));
-
-// Re-export MediaFunction / MouseAction for encoder presets
-import { MediaFunction, MouseAction } from '../models/types';

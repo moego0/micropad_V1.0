@@ -92,7 +92,7 @@
 
 ## 🚀 Next Steps
 
-1. Add all Swift files to Xcode project (see `SWIFT_FILES_TO_ADD.md`)
+1. Open the existing Xcode project and confirm signing/build settings.
 2. Implement BLE characteristic read/write in `ProtocolHandler`
 3. Add foreground app monitoring service for per-app profile switching
 4. Test all views and functionality

@@ -1,5 +1,52 @@
 #include "profile_storage.h"
 
+namespace {
+template <size_t N>
+void copySafeString(char (&dest)[N], const char* src) {
+    memset(dest, 0, N);
+    if (src) {
+        strlcpy(dest, src, N);
+    }
+    dest[N - 1] = '\0';
+}
+
+template <size_t N>
+void copyBoundedBuffer(const char* src, char (&dest)[N]) {
+    memcpy(dest, src, N);
+    dest[N - 1] = '\0';
+}
+
+bool isSupportedActionType(uint8_t rawType) {
+    switch (rawType) {
+        case ACTION_NONE:
+        case ACTION_HOTKEY:
+        case ACTION_MACRO:
+        case ACTION_TEXT:
+        case ACTION_MEDIA:
+        case ACTION_MOUSE:
+        case ACTION_PROFILE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void resetAction(Action& action) {
+    memset(&action, 0, sizeof(Action));
+    action.type = ACTION_NONE;
+}
+
+void resetProfile(Profile& profile) {
+    memset(&profile, 0, sizeof(Profile));
+    profile.version = 1;
+    copySafeString(profile.name, "Unnamed");
+    for (uint8_t i = 0; i < 2; i++) {
+        profile.encoders[i].acceleration = true;
+        profile.encoders[i].stepsPerDetent = 4;
+    }
+}
+}
+
 ProfileStorage::ProfileStorage() {
     _initialized = false;
 }
@@ -39,7 +86,7 @@ bool ProfileStorage::saveProfile(const Profile& profile) {
     DEBUG_PRINTF("Saving profile %d: %s\n", profile.id, profile.name);
     
     // Create JSON document (allocate enough space)
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(8192);
     
     if (!_serializeProfile(profile, doc)) {
         DEBUG_PRINTLN("ERROR: Failed to serialize profile");
@@ -94,7 +141,9 @@ bool ProfileStorage::loadProfile(uint8_t id, Profile& profile) {
         return false;
     }
     
-    DynamicJsonDocument doc(4096);
+    resetProfile(profile);
+
+    DynamicJsonDocument doc(8192);
     DeserializationError error = deserializeJson(doc, file);
     file.close();
     
@@ -155,8 +204,12 @@ bool ProfileStorage::getProfileInfo(uint8_t id, char* name, size_t* size) {
     if (name) {
         // Quick read just to get the name
         DynamicJsonDocument doc(512);
-        deserializeJson(doc, file);
-        strcpy(name, doc["name"] | "Unknown");
+        DeserializationError error = deserializeJson(doc, file);
+        if (error) {
+            strlcpy(name, "Unknown", 32);
+        } else {
+            strlcpy(name, doc["name"] | "Unknown", 32);
+        }
     }
     
     file.close();
@@ -196,7 +249,9 @@ String ProfileStorage::_getProfilePath(uint8_t id) {
 
 bool ProfileStorage::_serializeProfile(const Profile& profile, JsonDocument& doc) {
     doc["id"] = profile.id;
-    doc["name"] = profile.name;
+    char safeName[sizeof(profile.name)];
+    copyBoundedBuffer(profile.name, safeName);
+    doc["name"] = safeName;
     doc["version"] = profile.version;
     
     // Serialize keys
@@ -230,8 +285,9 @@ bool ProfileStorage::_serializeProfile(const Profile& profile, JsonDocument& doc
 }
 
 bool ProfileStorage::_deserializeProfile(const JsonDocument& doc, Profile& profile) {
+    resetProfile(profile);
     profile.id = doc["id"] | 0;
-    strlcpy(profile.name, doc["name"] | "Unnamed", sizeof(profile.name));
+    copySafeString(profile.name, doc["name"] | "Unnamed");
     profile.version = doc["version"] | 1;
     
     // Deserialize keys (ArduinoJson 7: use as<JsonArrayConst> for const doc)
@@ -241,6 +297,10 @@ bool ProfileStorage::_deserializeProfile(const JsonDocument& doc, Profile& profi
         _deserializeAction(keyObj, profile.keys[i].action);
     }
     
+    for (size_t i = keysArray.size(); i < MATRIX_KEYS; i++) {
+        resetAction(profile.keys[i].action);
+    }
+
     // Deserialize encoders
     JsonArrayConst encodersArray = doc["encoders"].as<JsonArrayConst>();
     for (uint8_t i = 0; i < 2 && i < encodersArray.size(); i++) {
@@ -258,17 +318,22 @@ bool ProfileStorage::_deserializeProfile(const JsonDocument& doc, Profile& profi
 }
 
 void ProfileStorage::_serializeAction(const Action& action, JsonObject obj) {
-    obj["type"] = static_cast<int>(action.type);
-    
-    switch (action.type) {
+    const ActionType type = isSupportedActionType(static_cast<uint8_t>(action.type)) ? action.type : ACTION_NONE;
+    obj["type"] = static_cast<int>(type);
+
+    switch (type) {
         case ACTION_HOTKEY:
             obj["modifiers"] = action.config.hotkey.modifiers;
             obj["key"] = action.config.hotkey.key;
             break;
             
         case ACTION_TEXT:
-            obj["text"] = action.config.text.text;
+        {
+            char safeText[sizeof(action.config.text.text)];
+            copyBoundedBuffer(action.config.text.text, safeText);
+            obj["text"] = safeText;
             break;
+        }
             
         case ACTION_MEDIA:
             obj["function"] = static_cast<int>(action.config.media.function);
@@ -291,8 +356,10 @@ void ProfileStorage::_serializeAction(const Action& action, JsonObject obj) {
                 step["delayMs"] = action.config.macro.steps[i].delayMs;
                 step["key"] = action.config.macro.steps[i].key;
                 step["modifiers"] = action.config.macro.steps[i].modifiers;
-                if (action.config.macro.steps[i].text[0] != '\0') {
-                    step["text"] = action.config.macro.steps[i].text;
+                char safeStepText[sizeof(action.config.macro.steps[i].text)];
+                copyBoundedBuffer(action.config.macro.steps[i].text, safeStepText);
+                if (safeStepText[0] != '\0') {
+                    step["text"] = safeStepText;
                 }
                 step["mediaFunction"] = action.config.macro.steps[i].mediaFunction;
             }
@@ -305,8 +372,18 @@ void ProfileStorage::_serializeAction(const Action& action, JsonObject obj) {
 }
 
 void ProfileStorage::_deserializeAction(JsonObjectConst obj, Action& action) {
-    action.type = static_cast<ActionType>(obj["type"] | ACTION_NONE);
-    
+    resetAction(action);
+    if (obj.isNull()) {
+        return;
+    }
+
+    uint8_t rawType = obj["type"] | ACTION_NONE;
+    if (!isSupportedActionType(rawType)) {
+        return;
+    }
+
+    action.type = static_cast<ActionType>(rawType);
+
     switch (action.type) {
         case ACTION_HOTKEY:
             action.config.hotkey.modifiers = obj["modifiers"] | 0;
@@ -314,21 +391,42 @@ void ProfileStorage::_deserializeAction(JsonObjectConst obj, Action& action) {
             break;
             
         case ACTION_TEXT:
-            strlcpy(action.config.text.text, obj["text"] | "", sizeof(action.config.text.text));
+            copySafeString(action.config.text.text, obj["text"] | "");
             break;
             
         case ACTION_MEDIA:
-            action.config.media.function = static_cast<MediaFunction>(obj["function"] | 0);
+        {
+            uint8_t mediaFunction = obj["function"] | 0;
+            if (mediaFunction > MEDIA_FUNC_STOP) {
+                resetAction(action);
+                return;
+            }
+            action.config.media.function = static_cast<MediaFunction>(mediaFunction);
             break;
+        }
             
         case ACTION_MOUSE:
-            action.config.mouse.action = static_cast<MouseAction>(obj["action"] | 0);
+        {
+            uint8_t mouseAction = obj["action"] | 0;
+            if (mouseAction > MOUSE_ACTION_SCROLL_DOWN) {
+                resetAction(action);
+                return;
+            }
+            action.config.mouse.action = static_cast<MouseAction>(mouseAction);
             action.config.mouse.value = obj["value"] | 0;
             break;
+        }
             
         case ACTION_PROFILE:
-            action.config.profile.profileId = obj["profileId"] | 0;
+        {
+            uint8_t profileId = obj["profileId"] | 0;
+            if (profileId >= MAX_PROFILES) {
+                resetAction(action);
+                return;
+            }
+            action.config.profile.profileId = profileId;
             break;
+        }
             
         case ACTION_MACRO: {
             memset(&action.config.macro, 0, sizeof(MacroConfig));
@@ -340,7 +438,7 @@ void ProfileStorage::_deserializeAction(JsonObjectConst obj, Action& action) {
                 action.config.macro.steps[count].delayMs = stepObj["delayMs"] | 0;
                 action.config.macro.steps[count].key = stepObj["key"] | 0;
                 action.config.macro.steps[count].modifiers = stepObj["modifiers"] | 0;
-                strlcpy(action.config.macro.steps[count].text, stepObj["text"] | "", sizeof(action.config.macro.steps[count].text));
+                copySafeString(action.config.macro.steps[count].text, stepObj["text"] | "");
                 action.config.macro.steps[count].mediaFunction = stepObj["mediaFunction"] | 0;
                 count++;
             }
@@ -355,9 +453,10 @@ void ProfileStorage::_deserializeAction(JsonObjectConst obj, Action& action) {
 
 bool ProfileStorage::deserializeProfileFromObject(JsonObjectConst obj, Profile& profile) {
     if (!_initialized) return false;
-    
+    resetProfile(profile);
+
     profile.id = obj["id"] | 0;
-    strlcpy(profile.name, obj["name"] | "Unnamed", sizeof(profile.name));
+    copySafeString(profile.name, obj["name"] | "Unnamed");
     profile.version = obj["version"] | 1;
     
     JsonArrayConst keysArray = obj["keys"].as<JsonArrayConst>();

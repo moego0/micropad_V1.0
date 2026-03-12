@@ -5,9 +5,8 @@
 #include "ble_hid.h"
 
 // Create default profile (General use)
-inline Profile createDefaultProfile() {
-    Profile profile;
-    
+inline void populateDefaultProfile(Profile& profile) {
+    memset(&profile, 0, sizeof(Profile));
     profile.id = 0;
     strcpy(profile.name, "General");
     profile.version = 1;
@@ -96,8 +95,6 @@ inline Profile createDefaultProfile() {
     
     profile.encoders[1].acceleration = true;
     profile.encoders[1].stepsPerDetent = 4;
-    
-    return profile;
 }
 
 #endif // DEFAULT_PROFILE_H

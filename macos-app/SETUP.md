@@ -67,17 +67,17 @@ Micropad/
 ✅ **Main Window** - Sidebar navigation with 5 tabs
 ✅ **Devices View** - BLE device discovery and connection
 ✅ **Macros View** - Micropad grid with drag-and-drop tag builder
+✅ **Profiles View** - Implemented UI for profile browsing and editing
+✅ **Stats View** - Implemented stats dashboard UI
+✅ **Settings View** - Implemented settings and device management UI
 ✅ **URL Launcher** - Assign URLs to buttons with browser selection
 ✅ **Application Launcher** - Assign macOS apps to buttons
 ✅ **Bluetooth Service** - Core Bluetooth wrapper for BLE communication
 
 ## Features Not Yet Implemented
 
-⚠️ **Profiles View** - Placeholder (needs implementation)
-⚠️ **Stats View** - Placeholder (needs implementation)
-⚠️ **Settings View** - Placeholder (needs implementation)
-⚠️ **Profile Storage** - Needs UserDefaults or Core Data implementation
-⚠️ **Protocol Handler** - Needs BLE characteristic read/write implementation
+⚠️ **Profile Storage** - Persistence and sync still need end-to-end verification
+⚠️ **Protocol Handler** - BLE characteristic read/write still needs full end-to-end verification
 ⚠️ **Macro Recording** - Needs keyboard event capture
 
 ## Notes

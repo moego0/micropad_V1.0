@@ -5,8 +5,8 @@
 #include "ble_hid.h"
 
 // VS Code Profile
-inline Profile createVSCodeProfile() {
-    Profile profile;
+inline void populateVSCodeProfile(Profile& profile) {
+    memset(&profile, 0, sizeof(Profile));
     profile.id = 2;
     strcpy(profile.name, "VS Code");
     profile.version = 1;
@@ -100,13 +100,11 @@ inline Profile createVSCodeProfile() {
     
     profile.encoders[1].acceleration = false;
     profile.encoders[1].stepsPerDetent = 4;
-    
-    return profile;
 }
 
 // Photoshop/Creative Profile
-inline Profile createCreativeProfile() {
-    Profile profile;
+inline void populateCreativeProfile(Profile& profile) {
+    memset(&profile, 0, sizeof(Profile));
     profile.id = 3;
     strcpy(profile.name, "Creative");
     profile.version = 1;
@@ -201,8 +199,6 @@ inline Profile createCreativeProfile() {
     
     profile.encoders[1].acceleration = true;
     profile.encoders[1].stepsPerDetent = 4;
-    
-    return profile;
 }
 
 #endif // PROFILE_TEMPLATES_H

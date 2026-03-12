@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useProfilesStore } from '../stores/profilesStore';
 import { useDeviceStore } from '../stores/deviceStore';
 import { ActionType, MediaFunction, MouseAction } from '../models/types';
-import type { KeyConfig, EncoderActionConfig } from '../models/types';
+import type { KeyConfig, EncoderActionConfig, Profile } from '../models/types';
 import ActionEditModal from '../components/ActionEditModal';
 
 const KEY_COUNT = 12;
@@ -91,7 +91,9 @@ export default function ProfilesPage() {
   const selectedKeySlotIndex = useProfilesStore((s) => s.selectedKeySlotIndex);
   const deviceCapsText = useProfilesStore((s) => s.deviceCapsText);
   const statusText = useProfilesStore((s) => s.statusText);
+  const isLoadingProfile = useProfilesStore((s) => s.isLoadingProfile);
   const isPushInProgress = useProfilesStore((s) => s.isPushInProgress);
+  const isDirty = useProfilesStore((s) => s.isDirty);
   const pushStepText = useProfilesStore((s) => s.pushStepText);
 
   const loadProfiles = useProfilesStore((s) => s.loadProfiles);
@@ -135,6 +137,16 @@ export default function ProfilesPage() {
     }
   };
 
+  const handleSelectProfile = async (profile: Profile) => {
+    if (isLoadingProfile) return;
+    if (selectedProfile?.id === profile.id) return;
+    if (isDirty && selectedProfile?.id !== profile.id) {
+      const shouldDiscard = window.confirm('You have unsaved changes. Discard them and open another profile?');
+      if (!shouldDiscard) return;
+    }
+    await selectProfile(profile);
+  };
+
   return (
     <div className="p-6 animate-fade-in">
       <h1 className="text-2xl font-bold text-text-primary mb-2">Profiles</h1>
@@ -148,7 +160,8 @@ export default function ProfilesPage() {
               <h2 className="font-semibold text-text-primary text-sm">Your Profiles</h2>
               <button
                 onClick={() => loadProfiles()}
-                className="text-xs text-brand-blue hover:underline"
+                disabled={isLoadingProfile}
+                className="text-xs text-brand-blue hover:underline disabled:opacity-40"
               >
                 Refresh
               </button>
@@ -175,12 +188,12 @@ export default function ProfilesPage() {
                 {filteredProfiles.map((p) => (
                   <li
                     key={p.id}
-                    onClick={() => selectProfile(p)}
+                    onClick={() => void handleSelectProfile(p)}
                     className={`px-3 py-2.5 rounded-lg cursor-pointer flex items-center justify-between transition ${
                       selectedProfile?.id === p.id
                         ? 'bg-brand-blue/10 border border-brand-blue/30 text-text-primary'
                         : 'text-text-secondary hover:bg-surface-tertiary'
-                    }`}
+                    } ${isLoadingProfile ? 'opacity-60 pointer-events-none' : ''}`}
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{p.name}</p>
@@ -200,7 +213,7 @@ export default function ProfilesPage() {
               <button onClick={() => createProfile()} className="flex-1 py-1.5 bg-brand-blue text-white rounded-lg text-xs font-medium">
                 New
               </button>
-              <button onClick={() => duplicateProfile()} disabled={!editingProfile} className="flex-1 py-1.5 border border-border rounded-lg text-xs text-text-secondary disabled:opacity-30">
+              <button onClick={() => duplicateProfile()} disabled={!editingProfile || isLoadingProfile} className="flex-1 py-1.5 border border-border rounded-lg text-xs text-text-secondary disabled:opacity-30">
                 Duplicate
               </button>
             </div>
@@ -216,8 +229,14 @@ export default function ProfilesPage() {
           {!editingProfile ? (
             <div className="rounded-xl border border-border bg-surface-secondary p-12 text-center">
               <div className="text-4xl mb-4 opacity-20">⌨️</div>
-              <p className="text-text-primary font-medium mb-2">Select a profile to edit</p>
-              <p className="text-text-secondary text-sm mb-6">Choose a profile from the list, or create a new one.</p>
+              <p className="text-text-primary font-medium mb-2">
+                {isLoadingProfile ? 'Loading profile…' : 'Select a profile to edit'}
+              </p>
+              <p className="text-text-secondary text-sm mb-6">
+                {isLoadingProfile
+                  ? 'Fetching the full profile from your Micropad before opening the editor.'
+                  : 'Choose a profile from the list, or create a new one.'}
+              </p>
               <button onClick={() => createProfile()} className="px-5 py-2.5 bg-brand-blue text-white rounded-full font-medium text-sm">
                 Create profile
               </button>
@@ -249,17 +268,24 @@ export default function ProfilesPage() {
                     )}
                     <p className="text-xs text-text-tertiary mt-1">Profile ID {editingProfile.id} · Version {editingProfile.version}</p>
                   </div>
-                  {editingProfile.id === activeProfileId && (
-                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-medium flex-shrink-0">
-                      Active on device
-                    </span>
-                  )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {isDirty && (
+                      <span className="text-xs bg-amber-500/15 text-amber-300 px-2.5 py-1 rounded-full font-medium flex-shrink-0">
+                        Unsaved changes
+                      </span>
+                    )}
+                    {editingProfile.id === activeProfileId && (
+                      <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-medium flex-shrink-0">
+                        Active on device
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => pushToDevice()}
-                    disabled={isPushInProgress || !isConnected}
+                    disabled={isPushInProgress || isLoadingProfile || !isConnected}
                     className="px-4 py-2 bg-brand-blue hover:bg-brand-blue/90 text-white rounded-lg text-sm font-medium disabled:opacity-40 transition shadow-sm"
                     title={!isConnected ? 'Connect to device first' : undefined}
                   >
@@ -267,7 +293,7 @@ export default function ProfilesPage() {
                   </button>
                   <button
                     onClick={() => pullFromDevice()}
-                    disabled={!isConnected}
+                    disabled={isLoadingProfile || !isConnected}
                     className="px-4 py-2 border border-border rounded-lg text-sm text-text-primary disabled:opacity-40 hover:bg-surface-tertiary transition"
                     title={!isConnected ? 'Connect to device first' : undefined}
                   >
@@ -275,25 +301,25 @@ export default function ProfilesPage() {
                   </button>
                   <button
                     onClick={() => setActiveProfileOnDevice()}
-                    disabled={!isConnected}
+                    disabled={isLoadingProfile || !isConnected}
                     className="px-4 py-2 border border-emerald-500/40 rounded-lg text-sm text-emerald-400 disabled:opacity-40 hover:bg-emerald-500/10 transition"
                     title={!isConnected ? 'Connect to device first' : undefined}
                   >
                     Set as active
                   </button>
-                  <button onClick={() => saveLocally()} className="px-4 py-2 border border-border rounded-lg text-sm text-text-secondary hover:bg-surface-tertiary transition">
+                  <button onClick={() => saveLocally()} disabled={isLoadingProfile} className="px-4 py-2 border border-border rounded-lg text-sm text-text-secondary hover:bg-surface-tertiary transition disabled:opacity-40">
                     Save locally
                   </button>
                   <div className="flex-1" />
                   <button
                     onClick={() => deleteFromDevice()}
-                    disabled={!isConnected}
+                    disabled={isLoadingProfile || !isConnected}
                     className="px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-lg disabled:opacity-30 transition"
                     title={!isConnected ? 'Connect to device first' : undefined}
                   >
                     Delete from device
                   </button>
-                  <button onClick={() => deleteLocal()} className="px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition">
+                  <button onClick={() => deleteLocal()} disabled={isLoadingProfile} className="px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition disabled:opacity-30">
                     Delete locally
                   </button>
                 </div>
@@ -312,13 +338,14 @@ export default function ProfilesPage() {
                       <button
                         key={i}
                         onClick={() => handleEditKey(i)}
+                        disabled={isLoadingProfile}
                         className={`relative rounded-xl border-2 p-3 text-left min-h-[80px] transition-all hover:scale-[1.02] ${
                           isSelected
                             ? 'border-brand-blue bg-brand-blue/5 shadow-md shadow-brand-blue/20'
                             : hasAction
                               ? 'border-border bg-surface-tertiary hover:border-brand-blue/50'
                               : 'border-border/50 bg-surface-tertiary/50 hover:border-border'
-                        }`}
+                        } disabled:opacity-50`}
                       >
                         <span className="text-[10px] text-text-tertiary font-medium">K{i + 1}</span>
                         {hasAction ? (
@@ -348,7 +375,8 @@ export default function ProfilesPage() {
                           <button
                             key={preset}
                             onClick={() => applyEncoderPreset(idx, preset)}
-                            className="px-3 py-1.5 text-xs bg-surface-input hover:bg-brand-blue/10 hover:text-brand-blue rounded-lg text-text-primary border border-border/50 transition"
+                            disabled={isLoadingProfile}
+                            className="px-3 py-1.5 text-xs bg-surface-input hover:bg-brand-blue/10 hover:text-brand-blue rounded-lg text-text-primary border border-border/50 transition disabled:opacity-40"
                           >
                             {preset}
                           </button>
@@ -369,7 +397,7 @@ export default function ProfilesPage() {
                 <div className={`rounded-lg px-4 py-3 text-sm ${
                   statusText.includes('saved') || statusText.includes('loaded') || statusText.includes('active') || statusText.includes('deleted')
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                    : statusText.includes('Not connected') || statusText.includes('failed') || statusText.includes('error')
+                    : statusText.includes('Connect') || statusText.includes('Could not') || statusText.includes('failed') || statusText.includes('error') || statusText.includes('Lost connection')
                       ? 'bg-red-500/10 text-red-400 border border-red-500/20'
                       : 'bg-surface-tertiary text-text-secondary border border-border/50'
                 }`}>
@@ -387,6 +415,7 @@ export default function ProfilesPage() {
           keyIndex={editKeyIndex}
           supportedActions={deviceCaps?.supportedActions}
           supportsMacros={deviceCaps?.supportsMacros ?? false}
+          maxProfiles={deviceCaps?.maxProfiles ?? 8}
           onSave={handleSaveKey}
           onClose={() => setEditKeyIndex(null)}
         />

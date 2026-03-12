@@ -143,7 +143,7 @@ Messages over ~512 bytes are sent in chunks so they fit in BLE MTU.
 ## Troubleshooting (general)
 
 - **Bluetooth / scan** – Enable Bluetooth (and BLE), grant app access, restart app.
-- **Profile push fails** – Ensure connection is active; firmware must support `setProfile`.
+- **Profile push fails** – Ensure connection is active; the current firmware supports `setProfile`, and the app now surfaces capacity/disconnect errors directly.
 - **Stats empty** – Device must implement `getStats` and return `keyPresses`, `encoderTurns`, `uptime`.
 
 ## See also
